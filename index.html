@@ -338,11 +338,10 @@ function load() {
   const r = localStorage.getItem('539r');
   const s = localStorage.getItem('539s');
   const h = localStorage.getItem('539h');
-  const c = localStorage.getItem('539c');
   rec     = r ? JSON.parse(r) : JSON.parse(JSON.stringify(BASE_REC));
   st      = s ? JSON.parse(s) : JSON.parse(JSON.stringify(BASE_ST));
   retHist = h ? JSON.parse(h) : {};
-  conStat = c ? JSON.parse(c) : buildConStat(rec);
+  conStat = buildConStat(rec);
   if (!r) save();
   loadPickLog();
 }
@@ -350,7 +349,6 @@ function save() {
   localStorage.setItem('539r', JSON.stringify(rec));
   localStorage.setItem('539s', JSON.stringify(st));
   localStorage.setItem('539h', JSON.stringify(retHist));
-  localStorage.setItem('539c', JSON.stringify(conStat));
 }
 function loadPickLog() {
   const p = localStorage.getItem('539pp');
