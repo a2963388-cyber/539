@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今彩539 走勢分析</title>
+<style>
+:root {
+  --bg: #f0f4f8;
+  --card: #ffffff;
+  --primary: #16a34a;
+  --primary-dk: #15803d;
+  --text: #1e293b;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --z1: #2563eb; --z1-bg: #dbeafe;
+  --z2: #16a34a; --z2-bg: #dcfce7;
+  --z3: #ea580c; --z3-bg: #ffedd5;
+  --z4: #dc2626; --z4-bg: #fee2e2;
+  --od: #9333ea; --od-bg: #f3e8ff;
+  --warn: #d97706; --warn-bg: #fef3c7;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Header */
+header { background: var(--primary); color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+header h1 { font-size: 1.1rem; font-weight: 700; }
+#hdr-info { font-size: .78rem; opacity: .85; text-align: right; line-height: 1.5; }
+
+/* Input */
+.input-card { background: var(--card); margin: 12px; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+.input-card h2 { font-size: .82rem; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+.input-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input[type=number] { border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 6px; font-size: .95rem; text-align: center; width: 60px; outline: none; -moz-appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+input[type=number]:focus { border-color: var(--primary); }
+#inp-period { width: 96px; }
+.num-wrap { display: flex; gap: 5px; }
+.btn { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-size: .88rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
+.btn:hover { background: var(--primary-dk); }
+.btn-gray { background: #94a3b8; }
+.btn-gray:hover { background: #64748b; }
+.btn-red { background: #dc2626; }
+.btn-red:hover { background: #b91c1c; }
+
+/* Tabs */
+.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; padding: 0 12px; }
+.tab-btn { border: none; background: none; padding: 11px 14px; font-size: .83rem; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2.5px solid transparent; white-space: nowrap; transition: all .15s; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+
+/* Content */
+#content { padding: 12px; max-width: 760px; margin: 0 auto; }
+
+/* Card */
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.card h3 { font-size: .93rem; font-weight: 700; margin-bottom: 12px; }
+.sec-lbl { font-size: .72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+
+/* Balls */
+.ball { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; font-size: .82rem; font-weight: 700; margin: 2px; flex-shrink: 0; }
+.ball-sm { width: 26px; height: 26px; font-size: .72rem; margin: 1px; }
+.z1 { background: var(--z1-bg); color: var(--z1); }
+.z2 { background: var(--z2-bg); color: var(--z2); }
+.z3 { background: var(--z3-bg); color: var(--z3); }
+.z4 { background: var(--z4-bg); color: var(--z4); }
+.zx { background: #f1f5f9; color: #94a3b8; }
+
+/* Tags */
+.tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+.tag-hot { background: #fee2e2; color: #dc2626; }
+.tag-cold { background: #dbeafe; color: #2563eb; }
+.tag-od { background: var(--od-bg); color: var(--od); }
+.tag-warn { background: var(--warn-bg); color: var(--warn); }
+.tag-ok { background: #dcfce7; color: #16a34a; }
+.tag-gray { background: #f1f5f9; color: var(--muted); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+th { text-align: left; padding: 7px 8px; color: var(--muted); font-weight: 600; border-bottom: 1.5px solid var(--border); font-size: .75rem; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+
+/* Alerts */
+.alert { border-radius: 8px; padding: 10px 12px; font-size: .83rem; margin-bottom: 8px; line-height: 1.6; }
+.alert-danger { background: #fee2e2; color: #991b1b; }
+.alert-warn { background: var(--warn-bg); color: #92400e; }
+.alert-od { background: var(--od-bg); color: #6b21a8; }
+.alert-ok { background: #dcfce7; color: #166534; }
+.alert-blue { background: #dbeafe; color: #1e40af; }
+
+/* Group cards */
+.grp { border: 1.5px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.grp-title { font-size: .9rem; font-weight: 700; margin-bottom: 10px; }
+.grp-nums { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 8px; }
+.grp-meta { font-size: .79rem; color: var(--muted); line-height: 1.7; }
+.verify-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Stats */
+.zone-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.zone-box { border-radius: 8px; padding: 10px 8px; text-align: center; }
+.zone-box .val { font-size: 1.4rem; font-weight: 700; }
+.zone-box .lbl { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+
+/* Tail grid */
+.tail-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
+.tail-cell { border-radius: 8px; padding: 8px 4px; text-align: center; background: var(--bg); }
+.tail-cell .tv { font-size: 1.1rem; font-weight: 700; }
+.tail-cell .tl { font-size: .68rem; color: var(--muted); margin-top: 2px; }
+.bar-wrap { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.bar-fill { height: 100%; border-radius: 3px; }
+
+/* Num row */
+.num-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.num-row:last-child { border-bottom: none; }
+
+/* OD bar */
+.od-bar { flex: 1; }
+.od-label { min-width: 44px; text-align: right; font-size: .8rem; font-weight: 700; }
+
+/* Empty */
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: .88rem; }
+
+/* Settings textarea */
+textarea { width: 100%; height: 180px; font-family: monospace; font-size: .78rem; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px; resize: vertical; outline: none; }
+textarea:focus { border-color: var(--primary); }
+
+@media (max-width: 480px) {
+  .zone-grid { grid-template-columns: repeat(2,1fr); }
+  .input-row { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍀 今彩539 走勢分析</h1>
+  <div id="hdr-info">載入中…</div>
+</header>
+
+<div class="input-card">
+  <h2>＋ 輸入最新開獎號碼</h2>
+  <div class="input-row">
+    <input id="inp-period" type="number" placeholder="期號" />
+    <div class="num-wrap">
+      <input class="ni" type="number" min="1" max="39" placeholder="01" />
+      <input class="ni" type="number" min="1" max="39" placeholder="02" />
+      <input class="ni" type="number" min="1" max="39" placeholder="03" />
+      <input class="ni" type="number" min="1" max="39" placeholder="04" />
+      <input class="ni" type="number" min="1" max="39" placeholder="05" />
+    </div>
+    <button class="btn" onclick="addDraw()">送出 → 快報</button>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button class="tab-btn" onclick="go('report')">📋 快報</button>
+  <button class="tab-btn active" onclick="go('pick')">🎯 選號</button>
+  <button class="tab-btn" onclick="go('annual')">📈 年度規律</button>
+  <button class="tab-btn" onclick="go('stats')">📊 統計</button>
+  <button class="tab-btn" onclick="go('records')">📜 紀錄</button>
+  <button class="tab-btn" onclick="go('settings')">⚙️ 設定</button>
+  <button class="tab-btn" onclick="go('track')">🏆 中獎追蹤</button>
+</nav>
+
+<main id="content"></main>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────
+const Z = n => n<=9?1:n<=19?2:n<=29?3:4;
+const ZN = ['','一區 01-09','二區 10-19','三區 20-29','四區 30-39'];
+const ZL = ['','一區','二區','三區','四區'];
+const ZC = ['','z1','z2','z3','z4'];
+const f2 = n => String(n).padStart(2,'0');
+
+// ── BASE DATA（115001–115146，共146期，對應遺漏統計表 2026-06-16）──
+const BASE_REC = [
+  {p:115146,n:[5,17,23,25,29]},{p:115145,n:[12,16,24,28,36]},
+  {p:115144,n:[4,5,6,34,36]},{p:115143,n:[6,8,18,29,31]},
+  {p:115142,n:[8,15,20,29,31]},{p:115141,n:[1,4,32,35,39]},
+  {p:115140,n:[10,17,20,25,28]},{p:115139,n:[8,14,17,18,28]},
+  {p:115138,n:[13,27,30,37,38]},{p:115137,n:[7,21,26,27,31]},
+  {p:115136,n:[2,8,24,29,35]},{p:115135,n:[2,8,17,25,38]},
+  {p:115134,n:[7,12,22,26,30]},{p:115133,n:[5,14,19,20,28]},
+  {p:115132,n:[2,3,4,13,39]},{p:115131,n:[12,15,20,34,35]},
+  {p:115130,n:[6,9,12,19,31]},{p:115129,n:[2,3,18,19,21]},
+  {p:115128,n:[2,7,11,14,37]},{p:115127,n:[5,6,12,36,37]},
+  {p:115126,n:[6,15,16,24,38]},{p:115125,n:[4,8,15,16,37]},
+  {p:115124,n:[9,25,28,34,36]},{p:115123,n:[1,20,21,23,35]},
+  {p:115122,n:[4,6,24,31,32]},{p:115121,n:[8,15,20,32,33]},
+  {p:115120,n:[2,11,28,32,33]},{p:115119,n:[1,13,23,25,36]},
+  {p:115118,n:[8,18,28,35,39]},{p:115117,n:[2,6,7,9,23]},
+  {p:115116,n:[1,4,12,22,26]},{p:115115,n:[2,13,21,36,37]},
+  {p:115114,n:[11,18,21,22,25]},{p:115113,n:[18,19,23,26,28]},
+  {p:115112,n:[1,6,18,25,36]},{p:115111,n:[4,10,11,34,39]},
+  {p:115110,n:[8,16,24,27,37]},{p:115109,n:[8,22,26,36,39]},
+  {p:115108,n:[8,9,17,25,38]},{p:115107,n:[2,3,14,16,20]},
+  {p:115106,n:[6,15,27,30,31]},{p:115105,n:[2,6,22,32,36]},
+  {p:115104,n:[7,8,21,35,38]},{p:115103,n:[8,18,20,23,27]},
+  {p:115102,n:[3,20,21,22,33]},{p:115101,n:[16,21,25,29,34]},
+  {p:115100,n:[2,10,17,25,35]},{p:115099,n:[5,7,24,38,39]},
+  {p:115098,n:[1,6,14,26,28]},{p:115097,n:[3,4,5,20,36]},
+  {p:115096,n:[7,25,26,29,31]},{p:115095,n:[1,2,7,16,26]},
+  {p:115094,n:[6,8,12,21,30]},{p:115093,n:[2,9,11,29,30]},
+  {p:115092,n:[9,14,27,29,33]},{p:115091,n:[18,30,31,37,38]},
+  {p:115090,n:[7,12,17,24,31]},{p:115089,n:[9,21,25,27,30]},
+  {p:115088,n:[2,15,25,31,38]},{p:115087,n:[2,4,5,6,29]},
+  {p:115086,n:[4,8,21,27,29]},{p:115085,n:[7,11,17,31,34]},
+  {p:115084,n:[4,17,25,31,36]},{p:115083,n:[6,8,9,25,35]},
+  {p:115082,n:[1,9,13,18,21]},{p:115081,n:[3,10,11,13,23]},
+  {p:115080,n:[9,16,23,35,39]},{p:115079,n:[6,8,20,22,32]},
+  {p:115078,n:[6,9,11,16,17]},{p:115077,n:[8,18,24,34,35]},
+  {p:115076,n:[14,17,20,24,37]},{p:115075,n:[3,13,31,33,36]},
+  {p:115074,n:[10,20,28,29,36]},{p:115073,n:[7,12,24,29,35]},
+  {p:115072,n:[7,14,15,19,22]},{p:115071,n:[3,11,15,33,39]},
+  {p:115070,n:[5,23,25,30,37]},{p:115069,n:[21,22,31,32,35]},
+  {p:115068,n:[11,13,19,22,27]},{p:115067,n:[17,19,21,29,34]},
+  {p:115066,n:[8,10,18,20,34]},{p:115065,n:[2,5,11,12,15]},
+  {p:115064,n:[4,5,7,23,35]},{p:115063,n:[5,15,26,37,38]},
+  {p:115062,n:[11,12,14,17,32]},{p:115061,n:[7,12,15,32,38]},
+  {p:115060,n:[15,17,18,34,36]},{p:115059,n:[19,24,29,32,34]},
+  {p:115058,n:[1,4,8,12,36]},{p:115057,n:[4,8,12,16,17]},
+  {p:115056,n:[2,19,21,32,35]},{p:115055,n:[3,12,20,21,27]},
+  {p:115054,n:[2,8,15,29,31]},{p:115053,n:[2,4,13,26,27]},
+  {p:115052,n:[1,22,23,37,39]},{p:115051,n:[3,6,9,31,39]},
+  {p:115050,n:[5,22,28,35,36]},{p:115049,n:[16,23,25,32,36]},
+  {p:115048,n:[3,10,12,27,36]},{p:115047,n:[8,13,16,24,25]},
+  {p:115046,n:[1,8,19,20,25]},{p:115045,n:[4,11,22,23,27]},
+  {p:115044,n:[8,15,19,25,27]},{p:115043,n:[8,10,12,32,33]},
+  {p:115042,n:[6,8,11,20,21]},{p:115041,n:[5,7,15,18,34]},
+  {p:115040,n:[11,13,18,22,34]},{p:115039,n:[1,3,13,31,36]},
+  {p:115038,n:[4,28,31,33,34]},{p:115037,n:[1,12,21,35,37]},
+  {p:115036,n:[11,15,18,29,33]},{p:115035,n:[10,11,17,22,36]},
+  {p:115034,n:[16,21,25,31,35]},{p:115033,n:[3,8,22,27,32]},
+  {p:115032,n:[1,6,29,32,34]},{p:115031,n:[8,9,13,32,35]},
+  {p:115030,n:[8,17,22,27,28]},{p:115029,n:[3,5,11,15,23]},
+  {p:115028,n:[6,8,31,37,38]},{p:115027,n:[5,12,16,21,32]},
+  {p:115026,n:[16,17,29,30,36]},{p:115025,n:[6,11,28,36,37]},
+  {p:115024,n:[10,11,23,24,29]},{p:115023,n:[5,17,18,23,32]},
+  {p:115022,n:[6,15,23,26,30]},{p:115021,n:[6,7,15,35,37]},
+  {p:115020,n:[3,11,12,21,31]},{p:115019,n:[3,6,11,30,34]},
+  {p:115018,n:[4,15,23,27,38]},{p:115017,n:[16,19,23,25,34]},
+  {p:115016,n:[12,16,23,24,29]},{p:115015,n:[2,10,11,24,37]},
+  {p:115014,n:[18,19,22,27,29]},{p:115013,n:[1,2,3,19,36]},
+  {p:115012,n:[1,2,16,33,35]},{p:115011,n:[6,16,17,19,31]},
+  {p:115010,n:[3,13,18,24,30]},{p:115009,n:[11,25,26,34,38]},
+  {p:115008,n:[1,12,14,22,34]},{p:115007,n:[3,8,10,21,30]},
+  {p:115006,n:[5,10,14,15,28]},{p:115005,n:[1,2,6,11,33]},
+  {p:115004,n:[10,16,18,34,39]},{p:115003,n:[22,23,31,32,38]},
+  {p:115002,n:[17,18,25,36,39]},{p:115001,n:[15,16,18,29,36]},
+];
+
+const BASE_ST = {
+  1:{mg:44,ag:7.476,mc:4,ab:5,tt:787,t20:1,t50:7,t100:11},
+  2:{mg:46,ag:7.766,mc:4,ab:10,tt:757,t20:5,t50:12,t100:19},
+  3:{mg:58,ag:8.126,mc:4,ab:14,tt:723,t20:2,t50:5,t100:11},
+  4:{mg:45,ag:7.471,mc:4,ab:2,tt:788,t20:4,t50:8,t100:16},
+  5:{mg:51,ag:7.350,mc:3,ab:0,tt:801,t20:3,t50:5,t100:11},
+  6:{mg:44,ag:7.870,mc:4,ab:2,tt:748,t20:5,t50:11,t100:17},
+  7:{mg:45,ag:7.830,mc:4,ab:9,tt:751,t20:3,t50:8,t100:14},
+  8:{mg:48,ag:7.796,mc:3,ab:3,tt:755,t20:6,t50:13,t100:24},
+  9:{mg:37,ag:7.822,mc:4,ab:16,tt:751,t20:1,t50:4,t100:12},
+  10:{mg:60,ag:7.907,mc:4,ab:6,tt:744,t20:1,t50:3,t100:7},
+  11:{mg:92,ag:7.736,mc:4,ab:18,tt:759,t20:1,t50:4,t100:13},
+  12:{mg:48,ag:7.682,mc:4,ab:1,tt:765,t20:4,t50:5,t100:15},
+  13:{mg:58,ag:8.078,mc:4,ab:8,tt:728,t20:2,t50:4,t100:10},
+  14:{mg:53,ag:7.739,mc:3,ab:7,tt:760,t20:3,t50:5,t100:9},
+  15:{mg:60,ag:7.931,mc:3,ab:4,tt:742,t20:4,t50:6,t100:14},
+  16:{mg:45,ag:7.942,mc:4,ab:1,tt:739,t20:2,t50:6,t100:11},
+  17:{mg:57,ag:7.409,mc:4,ab:0,tt:794,t20:3,t50:5,t100:14},
+  18:{mg:43,ag:7.901,mc:5,ab:3,tt:745,t20:3,t50:8,t100:13},
+  19:{mg:49,ag:8.005,mc:4,ab:13,tt:734,t20:3,t50:4,t100:10},
+  20:{mg:45,ag:7.693,mc:4,ab:4,tt:765,t20:4,t50:10,t100:16},
+  21:{mg:60,ag:7.967,mc:4,ab:9,tt:738,t20:2,t50:8,t100:16},
+  22:{mg:48,ag:7.836,mc:4,ab:12,tt:750,t20:1,t50:6,t100:13},
+  23:{mg:52,ag:7.530,mc:3,ab:0,tt:779,t20:0,t50:5,t100:12},
+  24:{mg:45,ag:8.053,mc:4,ab:1,tt:730,t20:2,t50:5,t100:11},
+  25:{mg:52,ag:7.630,mc:4,ab:0,tt:771,t20:2,t50:10,t100:18},
+  26:{mg:50,ag:7.925,mc:5,ab:9,tt:742,t20:2,t50:8,t100:10},
+  27:{mg:48,ag:7.512,mc:4,ab:8,tt:783,t20:2,t50:5,t100:13},
+  28:{mg:56,ag:7.941,mc:4,ab:1,tt:741,t20:3,t50:8,t100:10},
+  29:{mg:74,ag:8.141,mc:4,ab:0,tt:723,t20:3,t50:5,t100:14},
+  30:{mg:59,ag:8.354,mc:4,ab:8,tt:704,t20:2,t50:3,t100:8},
+  31:{mg:50,ag:7.922,mc:4,ab:3,tt:743,t20:4,t50:7,t100:16},
+  32:{mg:77,ag:8.071,mc:4,ab:5,tt:729,t20:1,t50:5,t100:12},
+  33:{mg:61,ag:8.330,mc:4,ab:25,tt:704,t20:0,t50:3,t100:6},
+  34:{mg:63,ag:7.471,mc:3,ab:2,tt:788,t20:2,t50:5,t100:11},
+  35:{mg:42,ag:7.702,mc:3,ab:5,tt:764,t20:3,t50:7,t100:15},
+  36:{mg:55,ag:7.528,mc:4,ab:1,tt:782,t20:2,t50:9,t100:17},
+  37:{mg:39,ag:7.216,mc:4,ab:8,tt:815,t20:4,t50:6,t100:11},
+  38:{mg:52,ag:7.551,mc:4,ab:8,tt:779,t20:3,t50:6,t100:10},
+  39:{mg:50,ag:7.962,mc:5,ab:3,tt:739,t20:2,t50:6,t100:10},
+};
+
+// ── ANNUAL 2026 DATA ───────────────────────────────────────
+// 115001–115146，共146期完整統計
+const ANNUAL = {
+  year: 2026, periods: 146,
+  // 01–39 出現次數
+  freq: [0,18,23,19,18,17,26,16,32,13,14,25,22,14,11,23,21,21,22,15,17,22,20,21,16,24,12,18,15,22,13,23,19,11,20,20,25,16,14,12],
+  // 尾數偏差 %（實際 vs 理論）
+  tailBias: {0:-21.7,1:17.5,2:12.2,3:-13.2,4:-13.2,5:12.2,6:12.2,7:-5.2,8:10.8,9:-17.2},
+  zonePct: {1:24.9,2:25.8,3:25.6,4:23.7},
+  consecRate: 52.7,
+  avgSum: 97.0,
+  sumGoldPct: 52.1,
+  topPats: [['1-1-1-2',13],['1-2-1-1',11],['2-1-1-1',8],['1-1-2-1',8],['0-2-3-0',6],['2-1-0-2',6]],
+  hotNum: 8  // 最熱號，z值≈3.3，統計顯著
+};
+const ANN_EXP = 146*5/39; // 理論期望值≈18.7
+
+// ── STORAGE ────────────────────────────────────────────────
+let rec = [], st = {}, retHist = {}, conStat = {};
+let pendingPick = null;  // {strategies:{G1:[...], ...}, ts: timestamp}
+let pickLog = [];        // [{period, strategies, result, hits, ts}]
+// retHist[num] = [{period, gap}, ...]
+// conStat[num] = {total, repeats, followedBy:{m:count,...}}
+//   total      = times num appeared as "previous draw" predecessor
+//   repeats    = times num also appeared in the very next draw (連莊)
+//   followedBy = for each number m, how many times m appeared in the next draw after num
+
+function buildConStat(records) {
+  const s = {};
+  const ordered = [...records].reverse(); // chronological
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const prev = ordered[i].n, curr = ordered[i+1].n;
+    prev.forEach(n => {
+      if (!s[n]) s[n] = {total:0, repeats:0, followedBy:{}};
+      s[n].total++;
+      if (curr.includes(n)) s[n].repeats++;
+      curr.forEach(m => { s[n].followedBy[m] = (s[n].followedBy[m]||0)+1; });
+    });
+  }
+  return s;
+}
+
+function load() {
+  const r = localStorage.getItem('539r');
+  const s = localStorage.getItem('539s');
+  const h = localStorage.getItem('539h');
+  const c = localStorage.getItem('539c');
+  rec     = r ? JSON.parse(r) : JSON.parse(JSON.stringify(BASE_REC));
+  st      = s ? JSON.parse(s) : JSON.parse(JSON.stringify(BASE_ST));
+  retHist = h ? JSON.parse(h) : {};
+  conStat = c ? JSON.parse(c) : buildConStat(rec);
+  if (!r) save();
+  loadPickLog();
+}
+function save() {
+  localStorage.setItem('539r', JSON.stringify(rec));
+  localStorage.setItem('539s', JSON.stringify(st));
+  localStorage.setItem('539h', JSON.stringify(retHist));
+  localStorage.setItem('539c', JSON.stringify(conStat));
+}
+function loadPickLog() {
+  const p = localStorage.getItem('539pp');
+  const l = localStorage.getItem('539pl');
+  pendingPick = p ? JSON.parse(p) : null;
+  pickLog = l ? JSON.parse(l) : [];
+}
+function savePickLog() {
+  if(pendingPick) localStorage.setItem('539pp', JSON.stringify(pendingPick));
+  else localStorage.removeItem('539pp');
+  localStorage.setItem('539pl', JSON.stringify(pickLog));
+}
+function lockPick() {
+  const {g1,g2,g3,g4,g5,g6} = allGroups();
+  const pred = predictNextDraw();
+  const s = {};
+  if(g1) s.G1=g1.nums; if(g2) s.G2=g2.nums; if(g3) s.G3=g3.nums;
+  if(g4) s.G4=g4.nums; if(g5) s.G5=g5.nums; if(g6) s.G6=g6.nums;
+  if(pred.length>=5) s.G7=pred.slice(0,5).map(x=>x.n);
+  pendingPick = {strategies:s, ts:Date.now()};
+  savePickLog();
+  alert('✅ 已鎖定本期全部7組選號（含牽引預測）！\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
+}
+
+// ── CORE ANALYSIS ──────────────────────────────────────────
+const od   = n => st[n] ? +(st[n].ab / st[n].ag).toFixed(2) : 0;
+const sat  = n => st[n] ? +((st[n].ab / st[n].mg)*100).toFixed(1) : 0;
+const excl = n => st[n] ? st[n].ab >= st[n].mg : true;
+
+function candidates() { return Array.from({length:39},(_,i)=>i+1).filter(n=>!excl(n)); }
+function excluded()   { return Array.from({length:39},(_,i)=>i+1).filter(n=>excl(n)); }
+
+function zoneCounts(sliceN=10) {
+  const c={1:0,2:0,3:0,4:0};
+  rec.slice(0,sliceN).forEach(r=>r.n.forEach(n=>{c[Z(n)]++;}));
+  return c;
+}
+
+function hotCold(zc) {
+  const maxODinZone = z => {
+    const pool = candidates().filter(n=>Z(n)===z);
+    return pool.length ? Math.max(...pool.map(od)) : 0;
+  };
+  const sorted = [1,2,3,4].sort((a,b)=>{
+    if (zc[b]!==zc[a]) return zc[b]-zc[a];
+    return maxODinZone(b)-maxODinZone(a);
+  });
+  return {hot:sorted[0], cold:sorted[3]};
+}
+
+function tailCounts(n=10) {
+  const c={};
+  for(let i=0;i<=9;i++) c[i]=0;
+  rec.slice(0,n).forEach(r=>r.n.forEach(num=>{c[num%10]++;}));
+  return c;
+}
+
+// ── GROUP GENERATION ───────────────────────────────────────
+const byOD = arr => [...arr].sort((a,b)=>od(b)-od(a));
+
+// Composite pressure: overdue ratio (60%) + historical saturation (40%)
+// Prevents numbers with huge max-gap (like 11, max=92) from over-ranking
+function cs(n) {
+  if(!st[n]) return 0;
+  const s=st[n];
+  return (s.ab/s.ag)*0.6 + (s.ab/s.mg)*3*0.4;
+}
+const byCS = arr => [...arr].sort((a,b)=>cs(b)-cs(a));
+
+function consecPair(pool) {
+  const s=[...pool].sort((a,b)=>a-b);
+  let best=null, bestR=-1;
+  for(let i=0;i<s.length-1;i++) {
+    if(s[i+1]-s[i]===1) {
+      const r=od(s[i])+od(s[i+1]);
+      if(r>bestR){bestR=r;best=[s[i],s[i+1]];}
+    }
+  }
+  return best;
+}
+
+function genG1(cand, hot) {
+  const byZ={};
+  for(let z=1;z<=4;z++) byZ[z]=byOD(cand.filter(n=>Z(n)===z));
+  const hp=byZ[hot];
+  if(hp.length<3) return null;
+
+  const pair=consecPair(hp);
+  let hotPicks;
+  if(pair){
+    const rest=byOD(hp.filter(n=>!pair.includes(n)));
+    if(!rest[0]) return null;
+    hotPicks=[...pair, rest[0]];
+  } else {
+    hotPicks=hp.slice(0,3);
+  }
+
+  const others=[1,2,3,4].filter(z=>z!==hot);
+  const oPicks=[];
+  for(const z of others){
+    if(byZ[z][0]!==undefined){ oPicks.push(byZ[z][0]); if(oPicks.length===2) break; }
+  }
+  if(oPicks.length<2) return null;
+  return {nums:[...hotPicks,...oPicks].sort((a,b)=>a-b), pair, hot};
+}
+
+function genG2(cand, cold) {
+  const pool=byOD(cand.filter(n=>Z(n)!==cold));
+  if(pool.length<5) return null;
+  return {nums:pool.slice(0,5).sort((a,b)=>a-b), cold};
+}
+
+function genG3(cand, cold) {
+  const others=[1,2,3,4].filter(z=>z!==cold);
+  const byZ={};
+  [1,2,3,4].forEach(z=>{byZ[z]=byOD(cand.filter(n=>Z(n)===z));});
+  if(byZ[cold].length<2||others.some(z=>byZ[z].length<1)) return null;
+
+  const LIM=6;
+  const cp=byZ[cold].slice(0,LIM+1);
+  const o=[others.map(z=>byZ[z].slice(0,LIM))];
+  const [oa,ob,oc]=[byZ[others[0]].slice(0,LIM),byZ[others[1]].slice(0,LIM),byZ[others[2]].slice(0,LIM)];
+
+  let best=null, bestOD=-1;
+  for(let ci=0;ci<cp.length;ci++)
+    for(let cj=ci+1;cj<cp.length;cj++)
+      for(let a=0;a<oa.length;a++)
+        for(let b=0;b<ob.length;b++)
+          for(let c=0;c<oc.length;c++){
+            const pick=[cp[ci],cp[cj],oa[a],ob[b],oc[c]];
+            const s=pick.reduce((x,y)=>x+y,0);
+            if(s>=85&&s<=115){
+              const r=pick.reduce((x,y)=>x+od(y),0);
+              if(r>bestOD){bestOD=r;best=pick;}
+            }
+          }
+
+  if(!best) best=[cp[0],cp[1],oa[0],ob[0],oc[0]];
+  return {nums:best.sort((a,b)=>a-b), cold};
+}
+
+function genG4(cand) {
+  const superOD=cand.filter(n=>od(n)>=2.0);
+  // Use composite score: overdue ratio + historical saturation
+  const sorted=byCS(cand);
+  const picks=sorted.slice(0,5);
+  return {nums:picks.sort((a,b)=>a-b), allSuper:superOD.length>=5};
+}
+
+// G5: Tail Bias Strategy — 2026年度實測偏移（尾1+17.5%最熱，尾0-21.7%最冷）
+function genG5(cand) {
+  const tailW={1:3.5, 2:2.4, 5:2.4, 6:2.4, 8:2.2, 7:-1.0, 3:-2.6, 4:-2.6, 9:-3.4, 0:-4.3};
+  const scored=cand
+    .map(n=>({n, score:(tailW[n%10]||0)+od(n)*0.3}))
+    .sort((a,b)=>b.score-a.score);
+  const picks=scored.slice(0,5).map(x=>x.n);
+  const highTailCnt=picks.filter(n=>n%10===1||n%10===8||n%10===6||n%10===2||n%10===5).length;
+  const coldTailCnt=picks.filter(n=>n%10===0||n%10===9).length;
+  return {nums:picks.sort((a,b)=>a-b), highTailCnt, coldTailCnt};
+}
+
+// G6: 2026年度規律流（熱號08強制入選 + 年度頻率加權 + 2026尾數偏移）
+function genG6(cand) {
+  const maxF=32;
+  const must=cand.includes(8)?[8]:[];
+  const pool=cand.filter(n=>!must.includes(n));
+  const scored=pool.map(n=>({
+    n,
+    score:(ANNUAL.freq[n]/maxF)*50+(ANNUAL.tailBias[n%10]/17.5)*30+od(n)*20
+  })).sort((a,b)=>b.score-a.score);
+  const picks=[...must,...scored.slice(0,5-must.length).map(x=>x.n)];
+  return {nums:picks.sort((a,b)=>a-b), forced08:must.includes(8)};
+}
+
+function allGroups() {
+  const cand=candidates();
+  const zc=zoneCounts(10);
+  const {hot,cold}=hotCold(zc);
+  return {cand,zc,hot,cold,g1:genG1(cand,hot),g2:genG2(cand,cold),g3:genG3(cand,cold),g4:genG4(cand),g5:genG5(cand),g6:genG6(cand)};
+}
+
+// 依本期5碼的歷史「下期跟出」頻率，預測下期各號被帶動強度
+// 三信號合成預測：S1牽引(40%) + S2逾期壓力(35%) + S3年度熱度(25%)
+function predictNextDraw() {
+  if(!rec[0]) return [];
+  const last = rec[0].n;
+
+  // S1：連莊牽引（本期5碼的 followedBy 加總）
+  const s1raw = {};
+  last.forEach(n => {
+    const cst = conStat[n];
+    if(!cst || !cst.followedBy) return;
+    Object.entries(cst.followedBy).forEach(([m, cnt]) => { s1raw[+m] = (s1raw[+m]||0) + cnt; });
+  });
+  const s1max = Math.max(...Object.values(s1raw), 1);
+
+  // S2：逾期壓力（複合評分 cs(n) = 逾期倍數×0.6 + 歷史飽和度×0.4）
+  const allNums = Array.from({length:39},(_,i)=>i+1).filter(n=>!excl(n));
+  const s2max = Math.max(...allNums.map(n=>cs(n)), 0.01);
+
+  // S3：年度熱度（2026頻率排名 × 70% + 尾數偏移 × 30%）
+  const annMax = Math.max(...ANNUAL.freq.slice(1));
+  const s3fn = n => (ANNUAL.freq[n]/annMax)*70 + Math.max(0, ANNUAL.tailBias[n%10]||0)/17.5*30;
+  const s3max = Math.max(...allNums.map(s3fn), 0.01);
+
+  return allNums.map(n => {
+    const n1 = (s1raw[n]||0)/s1max, n2 = cs(n)/s2max, n3 = s3fn(n)/s3max;
+    const combined = +(n1*40 + n2*35 + n3*25).toFixed(1);
+    const s1p=+(n1*100).toFixed(0), s2p=+(n2*100).toFixed(0), s3p=+(n3*100).toFixed(0);
+    return {
+      n, combined, s1p, s2p, s3p,
+      sigCount: (s1p>=55?1:0)+(s2p>=55?1:0)+(s3p>=55?1:0),
+      isLast: last.includes(n),
+      isOD: od(n)>=1.0,
+      isSuperOD: od(n)>=2.0,
+      isAlert9: st[n]?.ab===9,
+    };
+  }).sort((a,b)=>b.combined-a.combined);
+}
+
+// ── UI HELPERS ─────────────────────────────────────────────
+const ball  = (n,sm='') => `<span class="ball ${sm} ${ZC[Z(n)]}">${f2(n)}</span>`;
+const ballX = (n,sm='') => `<span class="ball ${sm} zx">${f2(n)}</span>`;
+
+function odTag(n){
+  const r=od(n);
+  if(r>=2.0) return `<span class="tag tag-od">×${r}倍</span>`;
+  if(r>=1.0) return `<span class="tag tag-warn">×${r}倍</span>`;
+  return `<span class="tag tag-gray">×${r}倍</span>`;
+}
+
+function ck(ok,label){
+  return `<span class="tag ${ok?'tag-ok':'tag-hot'}">${ok?'✅':'❌'} ${label}</span>`;
+}
+
+// ── TABS ───────────────────────────────────────────────────
+let tab='pick', lastReport=null;
+
+function go(t){
+  tab=t;
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active',['report','pick','annual','stats','records','settings','track'][i]===t);
+  });
+  render();
+}
+
+function render(){
+  const el=document.getElementById('content');
+  if(tab==='report')   renderReport(el);
+  else if(tab==='pick') renderPick(el);
+  else if(tab==='annual') renderAnnual(el);
+  else if(tab==='stats') renderStats(el);
+  else if(tab==='records') renderRecords(el);
+  else if(tab==='track') renderTrack(el);
+  else renderSettings(el);
+}
+
+// ── RENDER: REPORT ─────────────────────────────────────────
+function renderReport(el){
+  if(!lastReport){ el.innerHTML=`<div class="empty">尚無快報。<br>請輸入最新開獎號碼後按「送出」。</div>`; return; }
+  const R=lastReport;
+
+  function note(d){
+    if(d.abBefore===0) return '連莊';
+    if(d.ratio>=2.0) return '⭐ 超期回歸';
+    if(d.ratio>=1.0) return '逾期回歸';
+    return '正常回歸';
+  }
+
+  // warnings post-update
+  const w9=[], w78=[], superODs=[];
+  for(let n=1;n<=39;n++){
+    if(!st[n]||R.nums.includes(n)||excl(n)) continue;
+    if(st[n].ab===9) w9.push(n);
+    else if(st[n].ab===7||st[n].ab===8) w78.push(n);
+    if(od(n)>=2.0) superODs.push(n);
+  }
+  superODs.sort((a,b)=>od(b)-od(a));
+
+  const zd=R.zoneDist;
+
+  el.innerHTML=`
+  <div class="card">
+    <h3>📋 第 ${R.period} 期 快報</h3>
+    <div class="sec-lbl">本期開出號碼</div>
+    <div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px">${R.nums.map(n=>ball(n)).join('')}</div>
+    <table>
+      <thead><tr><th>號碼</th><th>沉寂期數</th><th>逾期倍數</th><th>區間</th><th>備註</th></tr></thead>
+      <tbody>${R.drawn.map(d=>`<tr>
+        <td>${ball(d.n,'ball-sm')}</td>
+        <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
+        <td>${odTag(d.n)}</td>
+        <td><span class="tag tag-gray">${ZL[Z(d.n)]}</span></td>
+        <td style="font-size:.78rem">${note(d)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>📊 本期區間分佈</h3>
+    <div class="zone-grid">
+      ${[1,2,3,4].map(z=>`<div class="zone-box" style="background:var(--z${z}-bg)">
+        <div class="val" style="color:var(--z${z})">${zd[z]}</div>
+        <div class="lbl">${ZL[z]}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔁 本期回歸號碼 — 歷史沉寂統計</h3>
+    <table>
+      <thead><tr><th>號碼</th><th>本次沉寂</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th></tr></thead>
+      <tbody>${R.drawn.map(d => {
+        const h = retHist[d.n];
+        const allGaps = h ? h.map(x=>x.gap) : [];
+        const cnt = allGaps.length;
+        if (cnt < 1) return `<tr><td>${ball(d.n,'ball-sm')}</td><td>${d.abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
+        const avg = (allGaps.reduce((a,b)=>a+b,0)/cnt).toFixed(1);
+        const min = Math.min(...allGaps), max = Math.max(...allGaps);
+        return `<tr>
+          <td>${ball(d.n,'ball-sm')}</td>
+          <td style="font-weight:600">${d.abBefore}期</td>
+          <td style="text-align:center">${cnt}次</td>
+          <td style="text-align:center">${avg}期</td>
+          <td style="text-align:center">${min}期</td>
+          <td style="text-align:center">${max}期</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>⚠️ 沉寂號追蹤更新</h3>
+    ${w9.length?`<div class="alert alert-danger">🆕 <strong>最高警戒（9期）</strong>：下期再未開即進入排除<br>${w9.map(n=>ball(n,'ball-sm')).join('')}</div>`:''}
+    ${w78.length?`<div class="alert alert-warn">⚠️ <strong>持續觀察（7–8期）</strong>：${w78.map(n=>`${ball(n,'ball-sm')}<small style="font-size:.7rem"> ${st[n].ab}期</small>`).join(' ')}</div>`:''}
+    ${superODs.length?`<div class="alert alert-od">⭐ <strong>超期候選號（逾期 ≥2.0倍）</strong>：<br>${superODs.map(n=>`${ball(n,'ball-sm')}<small style="font-size:.7rem"> ×${od(n)}</small>`).join(' ')}</div>`:''}
+    ${!w9.length&&!w78.length&&!superODs.length?'<div style="font-size:.83rem;color:var(--muted)">本期無特殊警戒號碼</div>':''}
+  </div>
+
+  <div class="card">
+    <h3>🔗 連莊分析</h3>
+    ${(R.repeatNums&&R.repeatNums.length>0)
+      ? `<div class="alert alert-ok" style="margin-bottom:10px">✅ 本期連莊號碼（與上期重複）：${R.repeatNums.map(n=>ball(n,'ball-sm')).join('')}</div>`
+      : `<div class="alert alert-blue" style="margin-bottom:10px">本期無連莊號碼</div>`}
+    <div class="sec-lbl">下期連莊預警 — 本期5碼歷史連莊傾向</div>
+    <table>
+      <thead><tr><th>號碼</th><th>歷史出現</th><th>連莊次數</th><th>連莊率</th><th>最常伴隨下一期出現</th></tr></thead>
+      <tbody>${R.nums.map(n=>{
+        const cs=conStat[n];
+        if(!cs||cs.total===0) return `<tr><td>${ball(n,'ball-sm')}</td><td colspan="4" style="color:var(--muted);font-size:.78rem">累積中</td></tr>`;
+        const rate=+(cs.repeats/cs.total*100).toFixed(0);
+        const rateClr=rate>=20?'#dc2626':rate>=13?'var(--warn)':'var(--muted)';
+        const topF=Object.entries(cs.followedBy).sort((a,b)=>b[1]-a[1]).slice(0,3);
+        return `<tr>
+          <td>${ball(n,'ball-sm')}</td>
+          <td style="text-align:center">${cs.total}</td>
+          <td style="text-align:center">${cs.repeats}</td>
+          <td style="text-align:center;font-weight:700;color:${rateClr}">${rate}%</td>
+          <td style="font-size:.78rem">${topF.map(([m,c])=>`${ball(+m,'ball-sm')}<span style="font-size:.67rem;color:var(--muted)">${c}次</span>`).join(' ')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:6px">理論連莊率 ≈ 12.8%；≥20% 為高連莊傾向號碼</div>
+  </div>
+
+  <div class="card">
+    <h3>🔭 下期觀察重點</h3>
+    <div style="font-size:.86rem;line-height:1.8">${observation(R,w9,superODs)}</div>
+  </div>`;
+}
+
+function observation(R,w9,sOD){
+  const lines=[];
+  const zd=R.zoneDist;
+  const zero=[1,2,3,4].filter(z=>zd[z]===0);
+  if(zero.length) lines.push(`本期 ${zero.map(z=>ZL[z]).join('、')} 開出0碼，斷區走勢是否延續值得觀察。`);
+  const maxZ=[1,2,3,4].reduce((a,b)=>zd[a]>zd[b]?a:b);
+  if(zd[maxZ]>=3) lines.push(`${ZL[maxZ]} 本期強勢開出 ${zd[maxZ]} 碼，注意是否延續。`);
+  if(w9.length) lines.push(`${w9.map(f2).join('、')} 號已沉寂9期，下期若未開即列排除。`);
+  if(sOD.length) lines.push(`超期候選：${sOD.slice(0,3).map(n=>`${f2(n)}（×${od(n)}倍）`).join('、')} 回歸壓力持續。`);
+  if(!lines.length) lines.push('本期走勢平穩，無特殊異常，可參考選號分析。');
+  return lines.join('<br>');
+}
+
+// ── RENDER: PICK ───────────────────────────────────────────
+function renderPick(el){
+  const {cand,zc,hot,cold,g1,g2,g3,g4,g5,g6}=allGroups();
+  const ex=excluded();
+
+  function grpCard(emoji,title,g,body){
+    if(!g) return `<div class="grp"><div class="grp-title">${emoji} ${title}</div><div style="color:var(--muted);font-size:.83rem">候選號碼不足</div></div>`;
+    return `<div class="grp"><div class="grp-title">${emoji} ${title}</div><div class="grp-nums">${g.nums.map(n=>ball(n)).join('')}</div>${body(g)}</div>`;
+  }
+
+  el.innerHTML=`
+  ${lastReport ? `<div style="background:linear-gradient(135deg,#1a3a1a,#0d2b0d);border:1px solid #2d6a2d;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div>
+      <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期已登錄</span>
+      <span style="color:var(--muted);font-size:.8rem;margin-left:8px">開出：${lastReport.nums.map(n=>`<b style="color:#e2e8f0">${String(n).padStart(2,'0')}</b>`).join(' ')}</span>
+    </div>
+    <button onclick="go('report')" style="background:#2d6a2d;border:none;color:#4ade80;font-size:.78rem;padding:4px 10px;border-radius:6px;cursor:pointer">📋 查看快報</button>
+  </div>` : ''}
+  <div class="card">
+    <h3>📋 選號摘要</h3>
+    <div class="sec-lbl">候選號碼池（${cand.length}個）</div>
+    <div style="display:flex;gap:1px;flex-wrap:wrap;margin-bottom:10px">${cand.map(n=>ball(n,'ball-sm')).join('')}</div>
+    ${ex.length?`<div class="sec-lbl" style="margin-top:6px">排除號碼（${ex.length}個）</div>
+    <div style="display:flex;gap:1px;flex-wrap:wrap">${ex.map(n=>ballX(n,'ball-sm')).join('')}</div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <span>熱區：<span class="tag tag-hot">${ZN[hot]} ${zc[hot]}次</span></span>
+      <span>冷區：<span class="tag tag-cold">${ZN[cold]} ${zc[cold]}次</span></span>
+    </div>
+  </div>
+
+  ${(()=>{
+    if(!rec[0]) return '';
+    const pred = predictNextDraw();
+    const last5 = rec[0].n;
+    const top = pred.slice(0, 12);
+    const triple = pred.filter(x=>x.sigCount===3);
+
+    function miniBar(pct, clr) {
+      return `<div class="bar-wrap" style="height:5px;margin:1px 0"><div class="bar-fill" style="width:${pct}%;background:${clr};height:5px"></div></div>`;
+    }
+
+    return `<div class="card">
+      <h3>📡 下期號碼牽引預測（三信號合成）</h3>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:.78rem;color:var(--muted)">本期開出：</span>
+        ${last5.map(n=>ball(n,'ball-sm')).join('')}
+      </div>
+      <div style="display:flex;gap:14px;margin-bottom:10px;font-size:.72rem;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2563eb;vertical-align:middle;margin-right:3px"></span>牽引 S1（本期5碼歷史帶動）×40%</span>
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9333ea;vertical-align:middle;margin-right:3px"></span>逾期 S2（複合沉寂壓力）×35%</span>
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#dc2626;vertical-align:middle;margin-right:3px"></span>年度 S3（2026頻率+尾偏）×25%</span>
+      </div>
+
+      ${triple.length ? `<div style="margin-bottom:10px;padding:7px 10px;background:#fef3c7;border-radius:8px;font-size:.78rem">
+        <strong>⭐ 三信號共振：</strong>
+        ${triple.slice(0,5).map(x=>`${ball(x.n,'ball-sm')}<span style="font-size:.68rem;color:#d97706;margin-right:4px"> ${x.combined}分</span>`).join('')}
+        <span style="color:var(--muted)">（牽引＋逾期＋年度均≥55分，命中率最高）</span>
+      </div>` : ''}
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${top.map((x,i)=>{
+          const rank=i+1;
+          const rnkClr=rank<=3?'#dc2626':rank<=6?'#d97706':'#94a3b8';
+          const bdr = x.isLast?'border:2px solid #dc2626;':x.isSuperOD?'border:2px solid #9333ea;':x.isAlert9?'border:2px solid #d97706;':'border:1px solid var(--border);';
+          const badge = x.sigCount===3?'⭐':x.isLast?'🔁':x.isSuperOD?'💥':x.isAlert9?'🚨':'';
+          return `<div style="padding:7px 9px;border-radius:9px;background:var(--card);${bdr}">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+              <span style="font-size:.7rem;font-weight:700;color:${rnkClr};width:14px">${rank}</span>
+              ${ball(x.n,'ball-sm')}
+              <span style="font-size:.8rem;font-weight:700;margin-left:auto">${x.combined}</span>
+              <span style="font-size:.72rem">${badge}</span>
+            </div>
+            <div style="font-size:.65rem;color:#2563eb;display:flex;justify-content:space-between;margin-bottom:1px">
+              <span>牽引</span><span>${x.s1p}</span>
+            </div>
+            ${miniBar(x.s1p,'#2563eb')}
+            <div style="font-size:.65rem;color:#9333ea;display:flex;justify-content:space-between;margin-bottom:1px;margin-top:3px">
+              <span>逾期</span><span>${x.s2p}</span>
+            </div>
+            ${miniBar(x.s2p,'#9333ea')}
+            <div style="font-size:.65rem;color:#dc2626;display:flex;justify-content:space-between;margin-bottom:1px;margin-top:3px">
+              <span>年度</span><span>${x.s3p}</span>
+            </div>
+            ${miniBar(x.s3p,'#dc2626')}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:.68rem;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap">
+        <span>🔁 連莊候選紅框</span><span>💥 超期（≥2倍）紫框</span><span>🚨 警戒9期橙框</span><span>⭐ 三信號共振</span>
+        <span style="margin-left:auto">${pred.length}號參與評分</span>
+      </div>
+    </div>`;
+  })()}
+
+  ${grpCard('🔥','強勢區間重兵流',g1,g=>{
+    const hc=g.nums.filter(n=>Z(n)===g.hot).length;
+    const oz=[...new Set(g.nums.filter(n=>Z(n)!==g.hot).map(Z))].length;
+    return `<div class="grp-meta">
+      熱區（${ZL[g.hot]}）配 ${hc} 碼${g.pair?`，連號 ${f2(g.pair[0])}, ${f2(g.pair[1])}`:'（無連號，改取最高逾期）'}<br>
+      逾期倍數：${g.nums.map(n=>`${f2(n)}(×${od(n)})`).join(' ')}
+    </div>
+    <div class="verify-row">${ck(g.pair!==null,'含連號')}${ck(hc===3,'熱區3碼')}${ck(oz===2,'跨兩區各1')}${ck(g.nums.every(n=>!excl(n)),'候選池內')}</div>`;
+  })}
+
+  ${grpCard('🧊','極端斷區（空窗）流',g2,g=>{
+    const hc=g.nums.some(n=>Z(n)===g.cold);
+    return `<div class="grp-meta">
+      冷區（${ZL[g.cold]}）完全排除，5碼自由選取<br>
+      逾期倍數：${g.nums.map(n=>`${f2(n)}(×${od(n)})`).join(' ')}
+    </div>
+    <div class="verify-row">${ck(!hc,'冷區0碼')}${ck(g.nums.every(n=>!excl(n)),'候選池內')}</div>`;
+  })}
+
+  ${grpCard('⚖️','均勻分佈（平穩走勢）流',g3,g=>{
+    const sum=g.nums.reduce((a,b)=>a+b,0);
+    const zd={1:0,2:0,3:0,4:0}; g.nums.forEach(n=>{zd[Z(n)]++;});
+    const cc=Object.values(zd).sort((a,b)=>b-a);
+    const is2111=cc[0]===2&&cc[1]===1&&cc[2]===1&&cc[3]===1;
+    return `<div class="grp-meta">
+      分佈：${[1,2,3,4].map(z=>`${ZL[z]}×${zd[z]}`).join(' ')}，冷區(${ZL[g.cold]})配2碼<br>
+      號碼總和：<strong>${sum}</strong> ${sum>=85&&sum<=115?'✅':'❌ 超出85-115'}
+    </div>
+    <div class="verify-row">${ck(is2111,'2:1:1:1')}${ck(sum>=85&&sum<=115,'總和85-115')}${ck(g.nums.every(n=>!excl(n)),'候選池內')}</div>`;
+  })}
+
+  ${grpCard('⭐','超期回歸流（複合壓力評分）',g4,g=>{
+    return `<div class="grp-meta">${g.allSuper?'全部逾期倍數 ≥ 2.0':'超期號不足5個，以複合壓力補足'}<br>
+      <span style="font-size:.72rem">複合評分 = 逾期倍數×0.6 + 歷史飽和度×0.4，避免大間隔號碼(如11/32)誤判壓力</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${g.nums.map(n=>`<div style="text-align:center">
+        ${ball(n)}
+        <div style="font-size:.7rem;color:var(--od);font-weight:700;margin-top:2px">×${od(n)}</div>
+        <div style="font-size:.65rem;color:#9333ea">飽和${sat(n)}%</div>
+        <div style="font-size:.63rem;color:var(--muted)">綜合${cs(n).toFixed(2)}</div>
+      </div>`).join('')}
+    </div>`;
+  })}
+
+  ${grpCard('🎯','尾數優先流（2026年度偏移）',g5,g=>{
+    return `<div class="grp-meta">
+      2026年度實測：尾1(+17.5%)、尾2/5/6(+12%)、尾8(+10.8%) 偏熱；尾0(-21.7%)、尾9(-17.2%) 偏冷<br>
+      本組熱尾(1/2/5/6/8) 共 <strong>${g.highTailCnt}</strong> 碼，冷尾(0/9) 共 <strong>${g.coldTailCnt}</strong> 碼<br>
+      評分 = 2026尾數偏移權重 + 逾期倍數×0.3<br>
+      號碼：${g.nums.map(n=>`${f2(n)}(尾${n%10}, ×${od(n)})`).join(' ')}
+    </div>
+    <div class="verify-row">
+      ${ck(g.highTailCnt>=3,'熱尾≥3碼')}
+      ${ck(g.coldTailCnt===0,'零冷尾')}
+      ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
+    </div>`;
+  })}
+
+  ${grpCard('🔥','2026年度規律流（熱號08+頻率+尾數三合一）',g6,g=>{
+    return `<div class="grp-meta">
+      <span style="color:#dc2626;font-weight:700">08號年度最熱（146期出現32次，超理論值+71%，z≈3.3）</span><br>
+      評分 = 年度頻率排名×50% + 2026尾數偏移×30% + 逾期倍數×20%<br>
+      ${g.forced08?'✅ 08號已強制入選':'⚠️ 08號已被排除（超過最大間隔），改取次高分'}<br>
+      號碼：${g.nums.map(n=>`${f2(n)}(頻${ANNUAL.freq[n]}次,尾${n%10},×${od(n)})`).join(' ')}
+    </div>
+    <div class="verify-row">
+      ${ck(g.forced08,'含年度熱號08')}
+      ${ck(g.nums.filter(n=>ANNUAL.freq[n]>=20).length>=3,'高頻號≥3碼')}
+      ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
+    </div>`;
+  })}
+
+  <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
+    <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上6組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
+    <button class="btn" onclick="lockPick()" style="font-size:.95rem;padding:11px 28px">${pendingPick?'🔒 重新鎖定（覆蓋舊預測）':'🔒 鎖定本期全部預測（G1–G7含牽引）'}</button>
+    ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定7組（含牽引），等待下期開獎結果</div>`:''}
+    <div style="margin-top:8px"><button onclick="go('track')" style="border:none;background:none;color:var(--primary);font-size:.8rem;cursor:pointer;text-decoration:underline">查看中獎追蹤 →</button></div>
+  </div>`;
+}
+
+// ── RENDER: ANNUAL ─────────────────────────────────────────
+function renderAnnual(el){
+  const A=ANNUAL, T=A.periods;
+  const freq=A.freq;
+  const maxF=Math.max(...freq.slice(1));
+  const expF=+(T*5/39).toFixed(1);
+
+  // sorted ranking
+  const ranking=Array.from({length:39},(_,i)=>i+1).sort((a,b)=>freq[b]-freq[a]);
+
+  // tail bias sorted
+  const tailSorted=Object.entries(A.tailBias).sort((a,b)=>b[1]-a[1]);
+
+  // color helpers
+  const freqClr=f=>f>=25?'#dc2626':f>=20?'#d97706':f<=13?'#2563eb':f<=16?'#64748b':'var(--text)';
+  const biasClr=b=>b>=15?'#dc2626':b>=8?'#d97706':b<=-15?'#2563eb':b<=-8?'#64748b':'var(--text)';
+  const biasBg=b=>b>=15?'#fee2e2':b>=8?'#fef3c7':b<=-15?'#dbeafe':b<=-8?'#e0e7ff':'';
+
+  el.innerHTML=`
+  <div class="card">
+    <h3>📈 2026年度開獎規律（115001–115146，共${T}期）</h3>
+    <div class="zone-grid" style="margin-bottom:12px">
+      <div class="zone-box" style="background:#fee2e2"><div class="val" style="color:#dc2626">08</div><div class="lbl">年度最熱號</div></div>
+      <div class="zone-box" style="background:#fef3c7"><div class="val" style="color:#d97706">52.7%</div><div class="lbl">每期含連號率</div></div>
+      <div class="zone-box" style="background:#dcfce7"><div class="val" style="color:#16a34a">97.0</div><div class="lbl">平均號碼總和</div></div>
+      <div class="zone-box" style="background:#dbeafe"><div class="val" style="color:#2563eb">尾0</div><div class="lbl">最冷尾數(-21.7%)</div></div>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted)">理論期望：每號每期出現機率 5/39 = 12.82%，146期理論出現次數 ≈ <strong>${expF}</strong> 次</div>
+  </div>
+
+  <div class="card">
+    <h3>🔥 號碼年度熱冷排行（全39號）</h3>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">紅色=超頻熱號 / 藍色=欠頻冷號 / 理論值 ${expF} 次</div>
+    ${ranking.map((n,i)=>{
+      const f=freq[n], diff=f-expF, pct=+((f/expF-1)*100).toFixed(0);
+      const barW=Math.min((f/maxF)*100,100);
+      const clr=freqClr(f);
+      return `<div class="num-row">
+        <span style="color:var(--muted);width:20px;font-size:.75rem;text-align:right">${i+1}</span>
+        ${ball(n,'ball-sm')}
+        <div style="flex:1;margin:0 8px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <span style="font-size:.85rem;font-weight:700;color:${clr}">${f}次</span>
+            <span style="font-size:.72rem;color:${clr}">${diff>=0?'+':''}${diff>=0?'+':''} ${pct>0?'+':''}${pct}%</span>
+            ${f>=25?'<span class="tag tag-hot">熱</span>':f<=13?'<span class="tag tag-cold">冷</span>':''}
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${barW}%;background:${clr}"></div></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="card">
+    <h3>🎯 尾數年度偏移（選號核心規律）</h3>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有3個號碼（10,20,30），理論期望較低（56.2次 vs 其他尾數74.9次）</div>
+    <table>
+      <thead><tr><th>尾數</th><th>2026實際</th><th>理論值</th><th>年度偏差</th><th>對應號碼</th><th>選號建議</th></tr></thead>
+      <tbody>${tailSorted.map(([t,bias])=>{
+        const ti=+t;
+        const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===ti);
+        const exp=ti===0?+(T*5*3/39).toFixed(1):+(T*5*4/39).toFixed(1);
+        const actual=nums.reduce((s,n)=>s+freq[n],0);
+        const clr=biasClr(bias);
+        const bg=biasBg(bias);
+        return `<tr style="background:${bg}">
+          <td><strong style="font-size:1.1rem;color:${clr}">尾${ti}</strong></td>
+          <td style="text-align:center;font-weight:700;color:${clr}">${actual}</td>
+          <td style="text-align:center;color:var(--muted)">${exp}</td>
+          <td style="text-align:center;font-weight:700;color:${clr}">${bias>0?'+':''}${bias}%</td>
+          <td style="font-size:.75rem;color:var(--muted)">${nums.map(f2).join(', ')}</td>
+          <td style="font-size:.75rem">${bias>=15?'🔥強烈推薦':bias>=8?'✅ 推薦':bias<=-15?'🚫 迴避':bias<=-8?'⚠️ 謹慎':'➡️ 中性'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>📐 四區分佈 vs 理論值</h3>
+    <div class="zone-grid">
+      ${[1,2,3,4].map(z=>{
+        const theory=z===1?+(9/39*100).toFixed(1):+(10/39*100).toFixed(1);
+        const actual=A.zonePct[z];
+        const diff=(actual-theory).toFixed(1);
+        const hot=actual>theory+1, cold=actual<theory-1;
+        return `<div class="zone-box" style="background:var(--z${z}-bg)">
+          <div class="val" style="color:var(--z${z})">${actual}%</div>
+          <div class="lbl">
+            ${['','一區01-09','二區10-19','三區20-29','四區30-39'][z]}<br>
+            <span style="font-size:.68rem;color:${hot?'#dc2626':cold?'#2563eb':'var(--muted)'}">理論${theory}% (${diff>=0?'+':''}${diff}%)</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:8px">四區今年整體偏低（-1.9%），一/二/三區接近理論值，選號時四區可適量減少</div>
+  </div>
+
+  <div class="card">
+    <h3>🃏 最常見區間分配模式 Top 6</h3>
+    <table>
+      <thead><tr><th>模式（一/二/三/四）</th><th>出現次數</th><th>占比</th><th>特徵</th></tr></thead>
+      <tbody>${A.topPats.map(([pat,cnt])=>{
+        const pct=((cnt/T)*100).toFixed(1);
+        const zones=pat.split('-').map(Number);
+        const feat=zones[3]===0?'四區缺席':zones.every(z=>z<=2)?'均衡分佈':zones[2]>=3?'三區強勢':zones[0]>=2?'一區強勢':'混合';
+        return `<tr>
+          <td><strong>${pat.split('-').map((n,i)=>`<span style="color:var(--z${i+1})">${n}</span>`).join(' - ')}</strong></td>
+          <td style="text-align:center;font-weight:700">${cnt}</td>
+          <td style="text-align:center">${pct}%</td>
+          <td style="font-size:.8rem;color:var(--muted)">${feat}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+
+  <div class="card" style="background:linear-gradient(135deg,#dcfce7,#dbeafe)">
+    <h3>💡 2026年度選號建議速查</h3>
+    <div style="font-size:.85rem;line-height:2">
+      ✅ <strong>強烈推薦入選：08</strong>（年度出現32次，超理論值+71%，全年最強統計熱號）<br>
+      ✅ <strong>尾1優先</strong>（01,11,21,31）偏熱 +17.5%，每組建議含1碼<br>
+      ✅ <strong>尾2/5/6/8 均偏熱</strong> +10~12%，選號時可多配置<br>
+      ✅ <strong>連號要放</strong>：52.7%的期數含連號，每組加入一對連號有統計支撐<br>
+      ⚠️ <strong>四區謹慎</strong>（30–39）今年偏冷 -1.9%，不宜超過2碼<br>
+      🚫 <strong>迴避尾0</strong>（10,20,30）偏冷 -21.7%，全年最差表現<br>
+      🚫 <strong>迴避尾9</strong>（09,19,29,39）偏冷 -17.2%<br>
+      🚫 <strong>迴避14/33</strong>：年度最冷號碼（各只出現11次）
+    </div>
+  </div>`;
+}
+
+// ── RENDER: STATS ──────────────────────────────────────────
+function renderStats(el){
+  const zc10=zoneCounts(10);
+  const zc5r=zoneCounts(5);
+  const zc5p={1:0,2:0,3:0,4:0};
+  rec.slice(5,10).forEach(r=>r.n.forEach(n=>{zc5p[Z(n)]++;}));
+
+  const tc=tailCounts(10);
+  const maxT=Math.max(...Object.values(tc));
+
+  // Long-term tail analysis using t50/t100 accumulated data
+  const tail50={}, tail100={};
+  for(let t=0;t<=9;t++){tail50[t]=0;tail100[t]=0;}
+  for(let n=1;n<=39;n++){
+    if(st[n]){tail50[n%10]+=st[n].t50;tail100[n%10]+=st[n].t100;}
+  }
+  // Expected: tail0 has 3 nums, tails 1-9 have 4 nums each
+  const exp50 = t => t===0?+(50*5*3/39).toFixed(1):+(50*5*4/39).toFixed(1);
+  const exp100 = t => t===0?+(100*5*3/39).toFixed(1):+(100*5*4/39).toFixed(1);
+  const tailBias50 = t => +((tail50[t]/exp50(t)-1)*100).toFixed(1);
+  const tailsSorted50 = Array.from({length:10},(_,i)=>i).sort((a,b)=>tailBias50(b)-tailBias50(a));
+
+  const topOD=candidates().sort((a,b)=>od(b)-od(a)).slice(0,10);
+
+  // Return history stats
+  function retStats(n) {
+    const h = retHist[n];
+    if (!h || h.length === 0) return null;
+    const gaps = h.map(x=>x.gap);
+    const avg = (gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(1);
+    return { count: h.length, avg, min: Math.min(...gaps), max: Math.max(...gaps), last: h[h.length-1] };
+  }
+
+  // Numbers with any return history, sorted by count desc
+  const numsWithHist = Array.from({length:39},(_,i)=>i+1)
+    .filter(n => retHist[n] && retHist[n].length > 0)
+    .sort((a,b) => (retHist[b]?.length||0) - (retHist[a]?.length||0));
+
+  el.innerHTML=`
+  <div class="card">
+    <h3>📊 區間走勢（近5期 vs 前5期）</h3>
+    <table>
+      <thead><tr><th>區間</th><th>前5期</th><th>近5期</th><th>合計</th><th>趨勢</th></tr></thead>
+      <tbody>${[1,2,3,4].map(z=>{
+        const r5=zc5r[z],p5=zc5p[z];
+        const tr=r5>p5?'升溫🔺':r5<p5?'降溫🔻':'持平➡';
+        return `<tr><td><span style="color:var(--z${z});font-weight:600">${ZN[z]}</span></td>
+          <td>${p5}</td><td style="font-weight:600">${r5}</td><td>${zc10[z]}</td><td>${tr}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>📉 長期尾數偏移分析（選號核心規律）</h3>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">依50期偏移排序。此規律在50期、100期均高度穩定，為尾數優先流的理論依據。</p>
+    <table>
+      <thead><tr><th>尾數</th><th>50期實際</th><th>50期理論</th><th>偏移</th><th>100期偏移</th><th>號碼</th></tr></thead>
+      <tbody>${tailsSorted50.map(t=>{
+        const b50=tailBias50(t);
+        const b100=+((tail100[t]/exp100(t)-1)*100).toFixed(1);
+        const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===t);
+        const color=b50>=20?'#dc2626':b50<=-15?'#2563eb':b50>=10?'#d97706':'var(--text)';
+        const bg=b50>=20?'#fee2e2':b50<=-15?'#dbeafe':'';
+        return `<tr style="background:${bg}">
+          <td><strong style="font-size:1rem;color:${color}">尾${t}</strong></td>
+          <td style="text-align:center;font-weight:600;color:${color}">${tail50[t]}</td>
+          <td style="text-align:center;color:var(--muted)">${exp50(t)}</td>
+          <td style="text-align:center;font-weight:700;color:${color}">${b50>0?'+':''}${b50}%</td>
+          <td style="text-align:center;color:${b100>=10?'#dc2626':b100<=-10?'#2563eb':'var(--muted)'}">${b100>0?'+':''}${b100}%</td>
+          <td style="font-size:.75rem;color:var(--muted)">${nums.map(f2).join(', ')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="margin-top:8px;font-size:.75rem;color:var(--muted)">理論值基於等機率分佈：尾0（3個號）期望值較低，其餘尾數（4個號）期望值較高</div>
+  </div>
+
+  <div class="card">
+    <h3>🔢 尾數分佈（近10期）</h3>
+    <div class="tail-grid">
+      ${Array.from({length:10},(_,i)=>{
+        const c=tc[i], pct=maxT?c/maxT*100:0;
+        const hot=c>=4,cold=c===0;
+        return `<div class="tail-cell" style="${hot?'background:#fee2e2':cold?'background:#dbeafe':''}">
+          <div class="tv" style="color:${hot?'#dc2626':cold?'#2563eb':'var(--text)'}">${c}</div>
+          <div class="tl">尾 ${i}</div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${pct}%;background:${hot?'#dc2626':cold?'#2563eb':'#16a34a'}"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:8px;font-size:.78rem;color:var(--muted)">
+      過熱（≥4次）：${Object.entries(tc).filter(([,v])=>v>=4).map(([k])=>`尾${k}`).join('、')||'無'} ／
+      冰冷（0次）：${Object.entries(tc).filter(([,v])=>v===0).map(([k])=>`尾${k}`).join('、')||'無'}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔁 回歸統計（實際回歸間隔）</h3>
+    ${numsWithHist.length === 0
+      ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
+      : `<table>
+      <thead><tr><th>號碼</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th><th>上次沉寂</th></tr></thead>
+      <tbody>${numsWithHist.map(n => {
+        const s = retStats(n);
+        const avgGap = st[n]?.ag || '–';
+        const diff = s.count >= 2 ? (parseFloat(s.avg) - parseFloat(avgGap)).toFixed(1) : null;
+        const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
+        return `<tr>
+          <td>${ball(n,'ball-sm')}</td>
+          <td style="text-align:center;font-weight:600">${s.count}</td>
+          <td style="text-align:center">
+            <strong>${s.avg}</strong>期
+            ${diff !== null ? `<span style="font-size:.72rem;${diffColor}">(${parseFloat(diff)>0?'+':''}${diff})</span>` : ''}
+          </td>
+          <td style="text-align:center">${s.min}期</td>
+          <td style="text-align:center">${s.max}期</td>
+          <td style="text-align:center;font-size:.78rem;color:var(--muted)">${s.last.gap}期<br>第${s.last.period}期</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">括號內為與歷史平均間隔的差值，紅色=比平均更晚回歸，綠色=比平均更早</div>`
+    }
+  </div>
+
+  <div class="card">
+    <h3>🔗 連莊追蹤統計</h3>
+    ${(()=>{
+      const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>conStat[n]&&conStat[n].total>0);
+      if(nums.length===0) return '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎後自動累積。</div>';
+      const totalRep=nums.reduce((s,n)=>s+conStat[n].repeats,0);
+      const totalApp=nums.reduce((s,n)=>s+conStat[n].total,0);
+      const pairs=Math.round(totalApp/5);
+      const avgRep=(totalRep/pairs).toFixed(2);
+      const topCon=nums.filter(n=>conStat[n].total>=3).sort((a,b)=>conStat[b].repeats/conStat[b].total-conStat[a].repeats/conStat[a].total).slice(0,10);
+      return `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem">
+        <span>分析期對：<strong>${pairs}</strong> 對</span>
+        <span>總連莊事件：<strong>${totalRep}</strong> 次</span>
+        <span>每期平均連莊：<strong>${avgRep}</strong>（理論 0.64）</span>
+      </div>
+      <div class="sec-lbl">連莊率排行（出現≥3次的號碼）</div>
+      <table>
+        <thead><tr><th>號碼</th><th>出現次數</th><th>連莊次數</th><th>連莊率</th><th>最常引導下一期</th></tr></thead>
+        <tbody>${topCon.map(n=>{
+          const cs=conStat[n];
+          const rate=+(cs.repeats/cs.total*100).toFixed(0);
+          const rateClr=rate>=20?'#dc2626':rate>=13?'var(--warn)':'var(--muted)';
+          const top3=Object.entries(cs.followedBy).sort((a,b)=>b[1]-a[1]).slice(0,3);
+          return `<tr>
+            <td>${ball(n,'ball-sm')}</td>
+            <td style="text-align:center">${cs.total}</td>
+            <td style="text-align:center">${cs.repeats}</td>
+            <td style="text-align:center;font-weight:700;color:${rateClr}">${rate}%</td>
+            <td style="font-size:.77rem">${top3.map(([m,c])=>`${ball(+m,'ball-sm')}<span style="font-size:.66rem;color:var(--muted)">${c}次</span>`).join(' ')}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:6px">「最常引導下一期」= 該號碼出現後，下一期最常開出的號碼（連莊本身 + 後繼號）</div>`;
+    })()}
+  </div>
+
+  <div class="card">
+    <h3>⭐ 複合壓力排行 TOP 10</h3>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px">複合評分 = 逾期倍數×0.6 + 歷史飽和度×0.4，正確反映實際回歸壓力（避免大間隔號碼虛高）</div>
+    ${candidates().sort((a,b)=>cs(b)-cs(a)).slice(0,10).map((n,i)=>{
+      const r=od(n), s=sat(n), c=cs(n);
+      const clr=r>=2?'var(--od)':r>=1?'var(--warn)':'var(--muted)';
+      return `<div class="num-row">
+        <span style="color:var(--muted);width:18px;font-size:.78rem">${i+1}</span>
+        ${ball(n,'ball-sm')}
+        <div class="od-bar">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+            <span style="font-size:.82rem;font-weight:600">${f2(n)} 號</span>
+            ${r>=2?'<span class="tag tag-od">超期</span>':r>=1?'<span class="tag tag-warn">逾期</span>':''}
+            <span style="font-size:.7rem;color:#9333ea">飽和${s}%</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(s,100)}%;background:${clr}"></div></div>
+        </div>
+        <div class="od-label" style="color:${clr}">od×${r}<br><span style="color:#9333ea;font-weight:600;font-size:.75rem">綜${c.toFixed(2)}</span></div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── RENDER: RECORDS ────────────────────────────────────────
+function renderRecords(el){
+  if(!rec.length){ el.innerHTML='<div class="empty">尚無紀錄</div>'; return; }
+  el.innerHTML=`
+  <div class="card">
+    <h3>📜 開獎紀錄（共 ${rec.length} 期）</h3>
+    <table>
+      <thead><tr><th>期號</th><th>開獎號碼</th><th>一/二/三/四</th><th></th></tr></thead>
+      <tbody>${rec.map((r,i)=>{
+        const zd={1:0,2:0,3:0,4:0};
+        r.n.forEach(n=>{zd[Z(n)]++;});
+        return `<tr>
+          <td style="font-size:.8rem;color:var(--muted);font-weight:600">${r.p}</td>
+          <td>${r.n.map(n=>ball(n,'ball-sm')).join('')}</td>
+          <td style="font-size:.78rem;color:var(--muted)">${[1,2,3,4].map(z=>zd[z]).join('-')}</td>
+          <td><button onclick="delRec(${i})" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:.85rem;padding:4px">✕</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+function delRec(i){
+  if(!confirm(`確認刪除第 ${rec[i].p} 期？`)) return;
+  rec.splice(i,1);
+  save();
+  render();
+}
+
+// ── RENDER: TRACK ──────────────────────────────────────────
+function backtestGroups() {
+  const {g1,g2,g3,g4,g5,g6} = allGroups();
+  const pred = predictNextDraw();
+  const g7 = pred.length>=5 ? {nums:pred.slice(0,5).map(x=>x.n)} : null;
+  const grps = [
+    {key:'G1', label:'🔥強勢區間', g:g1},
+    {key:'G2', label:'🧊極端斷區', g:g2},
+    {key:'G3', label:'⚖️均勻分佈', g:g3},
+    {key:'G4', label:'⭐超期回歸', g:g4},
+    {key:'G5', label:'🎯尾數優先', g:g5},
+    {key:'G6', label:'📈年度規律', g:g6},
+    {key:'G7', label:'📡牽引預測', g:g7},
+  ];
+  const draws = rec.slice(0, Math.min(20, rec.length));
+  return grps.map(({key,label,g}) => {
+    if(!g) return {key, label, valid:false};
+    const mc = draws.map(r => g.nums.filter(n => r.n.includes(n)).length);
+    const total = mc.length;
+    const avg = total ? +(mc.reduce((a,b)=>a+b,0)/total).toFixed(2) : 0;
+    const randExp = +(5*5/39).toFixed(2);
+    return {key, label, nums:g.nums, avg, randExp,
+      hit3: mc.filter(m=>m>=3).length, hit2: mc.filter(m=>m>=2).length,
+      hit1: mc.filter(m=>m>=1).length, maxM: total?Math.max(...mc):0, total, valid:true};
+  });
+}
+
+function renderTrack(el) {
+  const bt = backtestGroups();
+  const validBt = bt.filter(g=>g.valid);
+  const N = validBt[0]?.total || 0;
+
+  // per-group log averages
+  const gKeys = ['G1','G2','G3','G4','G5','G6','G7'];
+  const gNames = {G1:'🔥強勢區間',G2:'🧊極端斷區',G3:'⚖️均勻分佈',G4:'⭐超期回歸',G5:'🎯尾數優先',G6:'📈年度規律',G7:'📡牽引預測'};
+  const logAvg = {};
+  gKeys.forEach(k => {
+    const rel = pickLog.filter(l => l.hits && l.hits[k] !== undefined);
+    if(rel.length) logAvg[k] = +(rel.reduce((a,l)=>a+l.hits[k],0)/rel.length).toFixed(2);
+  });
+
+  // suggestions
+  const sugg = [];
+  const hasPL = pickLog.length >= 2;
+  const bestBt = validBt.length ? validBt.reduce((a,b)=>b.avg>a.avg?b:a) : null;
+  if(hasPL) {
+    const logEntries = Object.entries(logAvg).sort((a,b)=>b[1]-a[1]);
+    if(logEntries.length && logEntries[0][1] >= 1.0)
+      sugg.push(`🏆 根據<strong>實際押注紀錄</strong>，<strong>${gNames[logEntries[0][0]]}</strong> 平均命中 <strong>${logEntries[0][1]}</strong> 碼，是目前績效最佳策略，建議優先使用。`);
+    const worstPL = logEntries[logEntries.length-1];
+    if(worstPL && logEntries[0][1]-worstPL[1] >= 0.5 && pickLog.length >= 3)
+      sugg.push(`⚠️ <strong>${gNames[worstPL[0]]}</strong> 近期表現偏低（平均 ${worstPL[1]} 碼），建議減少押注此策略。`);
+    if(logEntries.every(([,v])=>v < 0.4))
+      sugg.push(`🔍 所有策略命中率均偏低，建議確認遺漏統計表資料為最新（使用「⚙️ 設定」更新），或縮短分析期數。`);
+  }
+  if(!hasPL) {
+    if(bestBt && bestBt.avg >= 1.3)
+      sugg.push(`📊 回測顯示 <strong>${bestBt.label}</strong> 的選號類型在近 ${N} 期平均命中 <strong>${bestBt.avg}</strong> 碼，相對表現最佳。`);
+    sugg.push(`💡 <strong>開始追蹤</strong>：在「🎯 選號」頁鎖定本期預測，輸入開獎結果後將自動累積命中統計，持續 3 期以上才能給出可靠修正建議。`);
+  }
+  const g6bt = bt.find(g=>g.key==='G6');
+  if(g6bt?.valid && g6bt.avg >= 1.0 && !hasPL)
+    sugg.push(`📈 年度規律流（含08熱號）回測表現穩定，2026年度統計效應仍有效。`);
+
+  // pending pick HTML
+  const pendHTML = pendingPick ?
+    `<div class="alert alert-ok">
+      ✅ <strong>已鎖定，等待下期開獎！</strong>
+      <div style="margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        ${Object.entries(pendingPick.strategies).map(([k,nums])=>
+          `<div style="background:#fff;border-radius:6px;padding:6px;font-size:.76rem">
+            <div style="font-weight:700;color:var(--primary);margin-bottom:3px">${gNames[k]}</div>
+            <div>${nums.map(f2).join(', ')}</div>
+          </div>`
+        ).join('')}
+      </div>
+      <button onclick="pendingPick=null;savePickLog();render()" class="btn btn-gray" style="margin-top:10px;font-size:.75rem;padding:5px 12px">取消鎖定</button>
+    </div>` :
+    `<div style="color:var(--muted);font-size:.83rem;padding:8px 0">尚未鎖定本期預測。前往「🎯 選號」頁點擊「🔒 鎖定本期全部6組預測」，輸入下期開獎後自動記錄命中。</div>`;
+
+  // pick log HTML
+  const logHTML = pickLog.length === 0 ?
+    `<div style="color:var(--muted);font-size:.83rem;text-align:center;padding:20px">尚無紀錄。<br>在選號頁鎖定預測並輸入開獎號碼後，命中結果將在此顯示。</div>` :
+    `<div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>期號</th><th>開獎號碼</th><th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th><th>G6</th><th>G7牽引</th><th>最佳</th></tr></thead>
+      <tbody>${pickLog.map(l => {
+        const maxH = l.hits ? Math.max(...Object.values(l.hits), 0) : 0;
+        const bestG = l.hits ? (Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0] : '';
+        return `<tr>
+          <td style="font-size:.76rem;color:var(--muted)">${l.period}</td>
+          <td style="font-size:.72rem">${l.result.map(f2).join(' ')}</td>
+          ${gKeys.map(k => {
+            const h = l.hits?.[k];
+            if(h === undefined) return `<td style="color:var(--muted);text-align:center">—</td>`;
+            const clr = h>=3?'#dc2626':h>=2?'#d97706':h>=1?'#16a34a':'#94a3b8';
+            return `<td style="text-align:center;font-weight:700;color:${clr}">${h}</td>`;
+          }).join('')}
+          <td style="text-align:center"><span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">${bestG||'—'} ${maxH}碼</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)">
+      ${gKeys.filter(k=>logAvg[k]!==undefined).map(k=>
+        `<span>${gNames[k].slice(0,4)}平均：<strong style="color:${logAvg[k]>=1.0?'#16a34a':logAvg[k]>=0.5?'#d97706':'#94a3b8'}">${logAvg[k]}</strong>碼</span>`
+      ).join('')}
+    </div>
+    <button onclick="if(confirm('確認清空全部押注紀錄？'))pickLog=[];savePickLog();render();" class="btn btn-red" style="margin-top:10px;font-size:.75rem;padding:5px 12px">清空紀錄</button>`;
+
+  el.innerHTML = `
+  <div class="card">
+    <h3>🔒 本期預測狀態</h3>
+    ${pendHTML}
+  </div>
+
+  <div class="card" style="background:linear-gradient(135deg,#f0fdf4,#fffbeb)">
+    <h3>💡 策略修正建議</h3>
+    ${sugg.map(s=>`<div style="font-size:.84rem;line-height:1.85;padding:5px 0;border-bottom:1px solid var(--border)">${s}</div>`).join('')}
+  </div>
+
+  <div class="card">
+    <h3>📊 策略近期回測（當前選號 vs 近 ${N} 期開獎）</h3>
+    <div class="alert alert-blue" style="font-size:.76rem;margin-bottom:10px">
+      ⓘ 說明：以「當前狀態」生成的選號與歷史開獎比對。G4超期回歸流因選超期號（定義上近期少出現），此回測天生偏低，請以實際押注紀錄為準。
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>策略</th><th>本期選號</th><th>平均命中</th><th>1碼+</th><th>2碼+</th><th>3碼+</th><th>最高</th><th>評估</th></tr></thead>
+      <tbody>${bt.map(g => {
+        if(!g.valid) return `<tr><td colspan="8" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
+        const grade = g.avg>=1.5?'優秀':g.avg>=1.0?'良好':g.avg>=0.6?'普通':'偏低';
+        const clr = g.avg>=1.5?'#dc2626':g.avg>=1.0?'#d97706':g.avg>=0.6?'var(--muted)':'#2563eb';
+        return `<tr>
+          <td style="font-size:.78rem;font-weight:600">${g.label}</td>
+          <td style="font-size:.68rem;color:var(--muted)">${g.nums.map(f2).join(' ')}</td>
+          <td style="text-align:center;font-weight:700;color:${clr}">${g.avg}</td>
+          <td style="text-align:center;font-size:.8rem">${g.hit1}/${g.total}</td>
+          <td style="text-align:center;font-size:.8rem">${g.hit2}/${g.total}</td>
+          <td style="text-align:center;font-size:.8rem">${g.hit3}/${g.total}</td>
+          <td style="text-align:center">${g.maxM}</td>
+          <td><span class="tag ${g.avg>=1.5?'tag-hot':g.avg>=1.0?'tag-warn':'tag-gray'}">${grade}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼（5×5/39）</div>
+  </div>
+
+  <div class="card">
+    <h3>🏆 歷史押注命中紀錄（${pickLog.length} 筆）</h3>
+    ${logHTML}
+  </div>`;
+}
+
+// ── RENDER: SETTINGS ───────────────────────────────────────
+function renderSettings(el){
+  el.innerHTML=`
+  <div class="card">
+    <h3>⚙️ 更新遺漏統計表</h3>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">每隔約50期從樂透研究院網站複製最新資料貼入，更新平均間隔、最大間隔等長期數據。<br>格式：每行「號碼 最大間隔 平均間隔 最多連續 最近未出現期數 出現總數 20期 50期 100期」</p>
+    <textarea id="st-paste" placeholder="1 44 7.476 4 3 787 1 7 11&#10;2 46 7.766 4 8 757 5 12 19&#10;…"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn" onclick="applyStats()">套用更新</button>
+      <button class="btn btn-red" onclick="resetAll()">重設所有資料</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📊 目前各號碼狀態</h3>
+    <table>
+      <thead><tr><th>號碼</th><th>沉寂期</th><th>平均間隔</th><th>最大間隔</th><th>逾期倍數</th></tr></thead>
+      <tbody>${Array.from({length:39},(_,i)=>i+1).map(n=>{
+        const s=st[n], r=od(n), ex=excl(n);
+        return `<tr style="${ex?'background:#fee2e2':''}">
+          <td>${ex?ballX(n,'ball-sm'):ball(n,'ball-sm')}</td>
+          <td>${s.ab}</td><td>${s.ag}</td><td>${s.mg}</td>
+          <td style="color:${ex?'#dc2626':r>=2?'var(--od)':r>=1?'var(--warn)':'var(--muted)'};font-weight:${r>=1||ex?'700':'400'}">
+            ${ex?'🚫排除':'×'+r}
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+function applyStats(){
+  const raw=document.getElementById('st-paste').value.trim();
+  if(!raw) return;
+  let cnt=0;
+  raw.split('\n').forEach(line=>{
+    const p=line.trim().split(/\s+/).map(Number);
+    if(p.length>=9){
+      const [num,mg,ag,mc,ab,tt,t20,t50,t100]=p;
+      if(num>=1&&num<=39){ st[num]={mg,ag,mc,ab,tt,t20,t50,t100}; cnt++; }
+    }
+  });
+  save();
+  alert(`已更新 ${cnt} 個號碼`);
+  render();
+}
+
+function resetAll(){
+  if(!confirm('確認重設全部資料回預設值？\n（含開獎紀錄、統計、押注紀錄）')) return;
+  rec=JSON.parse(JSON.stringify(BASE_REC));
+  st=JSON.parse(JSON.stringify(BASE_ST));
+  retHist={};
+  conStat=buildConStat(rec);
+  pendingPick=null;
+  pickLog=[];
+  savePickLog();
+  save();
+  lastReport=null;
+  updateHdr();
+  alert(`✅ 已重設完成！\n資料截至第 ${rec[0].p} 期，共 ${rec.length} 筆開獎紀錄。\n押注紀錄已清空。`);
+  go('pick');
+}
+
+// ── ADD DRAW ───────────────────────────────────────────────
+function addDraw(){
+  const pv=parseInt(document.getElementById('inp-period').value);
+  const ni=[...document.querySelectorAll('.ni')];
+  const nums=ni.map(i=>parseInt(i.value)).filter(n=>n>=1&&n<=39);
+
+  if(!pv||pv<100000){ alert('請輸入有效期號（6位數）'); return; }
+  if(nums.length!==5){ alert('請輸入5個 01–39 的號碼'); return; }
+  if(new Set(nums).size!==5){ alert('號碼不可重複'); return; }
+  if(rec[0]&&pv<=rec[0].p){ alert(`期號需大於目前最新期（${rec[0].p}）`); return; }
+
+  const sorted=nums.sort((a,b)=>a-b);
+
+  // snapshot pre-update stats for report
+  const drawn=sorted.map(n=>({n,abBefore:st[n]?st[n].ab:0,ratio:od(n)}));
+  const zd={1:0,2:0,3:0,4:0}; sorted.forEach(n=>{zd[Z(n)]++;});
+
+  // record return history BEFORE updating absent counts
+  sorted.forEach(n => {
+    const gap = st[n] ? st[n].ab : 0;
+    if (!retHist[n]) retHist[n] = [];
+    retHist[n].push({period: pv, gap});
+  });
+
+  // record consecutive stat: prev draw → current draw
+  const repeatNums = [];
+  if (rec.length > 0) {
+    const prev = rec[0].n;
+    prev.forEach(n => {
+      if (!conStat[n]) conStat[n] = {total:0, repeats:0, followedBy:{}};
+      conStat[n].total++;
+      if (sorted.includes(n)) { conStat[n].repeats++; repeatNums.push(n); }
+      sorted.forEach(m => { conStat[n].followedBy[m] = (conStat[n].followedBy[m]||0)+1; });
+    });
+  }
+
+  // update stats
+  for(let n=1;n<=39;n++){
+    if(!st[n]) continue;
+    st[n].ab = sorted.includes(n) ? 0 : st[n].ab+1;
+  }
+
+  // check pending pick against this draw result
+  if(pendingPick) {
+    const hits = {};
+    for(const [k,nums] of Object.entries(pendingPick.strategies)) {
+      hits[k] = nums.filter(n => sorted.includes(n)).length;
+    }
+    pickLog.unshift({period:pv, strategies:pendingPick.strategies, result:sorted, hits, ts:pendingPick.ts});
+    pendingPick = null;
+    savePickLog();
+  }
+
+  // add record
+  rec.unshift({p:pv,n:sorted});
+  save();
+
+  lastReport={period:pv,nums:sorted,drawn,zoneDist:zd,repeatNums};
+
+  // clear inputs
+  document.getElementById('inp-period').value='';
+  ni.forEach(i=>{i.value='';});
+
+  updateHdr();
+  go('pick');
+}
+
+// ── KEYBOARD SHORTCUTS ─────────────────────────────────────
+document.getElementById('inp-period').addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key==='\t') document.querySelectorAll('.ni')[0].focus();
+});
+document.querySelectorAll('.ni').forEach((inp,i,all)=>{
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter') i<all.length-1 ? all[i+1].focus() : addDraw();
+  });
+  inp.addEventListener('input',()=>{
+    if(inp.value.length>=2&&i<all.length-1) all[i+1].focus();
+  });
+});
+
+// ── HEADER ─────────────────────────────────────────────────
+function updateHdr(){
+  const r=rec[0];
+  document.getElementById('hdr-info').innerHTML=r
+    ?`最新：第 ${r.p} 期<br>${r.n.map(f2).join(' ')}`
+    :'尚無紀錄';
+}
+
+// ── INIT ───────────────────────────────────────────────────
+load();
+updateHdr();
+render();
+</script>
+</body>
+</html>
