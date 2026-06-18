@@ -334,6 +334,24 @@ function buildConStat(records) {
   return s;
 }
 
+function reconstructLastReport() {
+  if (!rec[0]) return;
+  const sorted = rec[0].n;
+  const pv = rec[0].p;
+  const drawn = sorted.map(n => {
+    let abBefore = 0;
+    for (let i = 1; i < rec.length; i++) {
+      if (rec[i].n.includes(n)) { abBefore = i - 1; break; }
+      abBefore = i;
+    }
+    return {n, abBefore, ratio: +(abBefore / (st[n]?.ag || 1)).toFixed(2)};
+  });
+  const zd = {1:0,2:0,3:0,4:0};
+  sorted.forEach(n => {zd[Z(n)]++;});
+  const repeatNums = rec[1] ? sorted.filter(n => rec[1].n.includes(n)) : [];
+  lastReport = {period:pv, nums:sorted, drawn, zoneDist:zd, repeatNums};
+}
+
 function load() {
   const r = localStorage.getItem('539r');
   const s = localStorage.getItem('539s');
@@ -353,6 +371,7 @@ function load() {
     conStat = buildConStat(rec);
   }
   loadPickLog();
+  reconstructLastReport();
 }
 function save() {
   localStorage.setItem('539r', JSON.stringify(rec));
