@@ -793,6 +793,8 @@ function observation(R,w9,sOD){
 function renderPick(el){
   const {cand,g1,g2,g3,g4,g5,g6,g8}=allGroups();
   const ex=excluded();
+  const zc=zoneCounts(10);
+  const {hot,cold}=hotCold(zc);
 
   function grpCard(emoji,title,g,body){
     if(!g) return `<div class="grp"><div class="grp-title">${emoji} ${title}</div><div style="color:var(--muted);font-size:.83rem">候選號碼不足</div></div>`;
