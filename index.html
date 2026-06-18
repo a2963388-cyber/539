@@ -615,6 +615,30 @@ function ck(ok,label){
 // ── TABS ───────────────────────────────────────────────────
 let tab='pick', lastReport=null;
 
+// ── SORT HELPERS ───────────────────────────────────────────
+const sortState = {};
+function setSort(tid, col) {
+  const s = sortState[tid];
+  sortState[tid] = (s && s.col === col)
+    ? {col, dir: s.dir === 'asc' ? 'desc' : 'asc'}
+    : {col, dir: 'desc'};
+}
+function thSort(tid, col, label) {
+  const s = sortState[tid];
+  const active = s && s.col === col;
+  const arr = active ? (s.dir === 'asc' ? '▲' : '▼') : '↕';
+  return `<th onclick="setSort('${tid}','${col}');render()" style="cursor:pointer;user-select:none;white-space:nowrap">${label} <span style="font-size:.65em;color:${active?'#4ade80':'#64748b'}">${arr}</span></th>`;
+}
+function applySort(arr, tid, defCol, defDir) {
+  const s = sortState[tid] || (defCol ? {col:defCol, dir:defDir||'desc'} : null);
+  if (!s) return arr;
+  return [...arr].sort((a, b) => {
+    const va = a[s.col], vb = b[s.col];
+    const cmp = typeof va === 'string' ? va.localeCompare(vb, 'zh-TW') : (va??0) - (vb??0);
+    return s.dir === 'asc' ? cmp : -cmp;
+  });
+}
+
 function go(t){
   tab=t;
   document.querySelectorAll('.tab-btn').forEach((b,i)=>{
@@ -664,8 +688,8 @@ function renderReport(el){
     <div class="sec-lbl">本期開出號碼</div>
     <div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px">${R.nums.map(n=>ball(n)).join('')}</div>
     <table>
-      <thead><tr><th>號碼</th><th>沉寂期數</th><th>逾期倍數</th><th>區間</th><th>備註</th></tr></thead>
-      <tbody>${R.drawn.map(d=>`<tr>
+      <thead><tr>${thSort('rpt-drawn','n','號碼')}${thSort('rpt-drawn','abBefore','沉寂期數')}${thSort('rpt-drawn','ratio','逾期倍數')}<th>區間</th><th>備註</th></tr></thead>
+      <tbody>${applySort(R.drawn,'rpt-drawn','n','asc').map(d=>`<tr>
         <td>${ball(d.n,'ball-sm')}</td>
         <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
         <td>${odTag(d.n)}</td>
@@ -688,17 +712,16 @@ function renderReport(el){
   <div class="card">
     <h3>🔁 本期回歸號碼 — 歷史沉寂統計</h3>
     <table>
-      <thead><tr><th>號碼</th><th>本次沉寂</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th></tr></thead>
-      <tbody>${R.drawn.map(d => {
-        const h = retHist[d.n];
-        const allGaps = h ? h.map(x=>x.gap) : [];
-        const cnt = allGaps.length;
-        if (cnt < 1) return `<tr><td>${ball(d.n,'ball-sm')}</td><td>${d.abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
-        const avg = (allGaps.reduce((a,b)=>a+b,0)/cnt).toFixed(1);
-        const min = Math.min(...allGaps), max = Math.max(...allGaps);
+      <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','cnt','回歸次數')}${thSort('rpt-ret','avg','平均沉寂期')}${thSort('rpt-ret','min','最短')}${thSort('rpt-ret','max','最長')}</tr></thead>
+      <tbody>${applySort(R.drawn.map(d=>{
+        const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
+        const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
+        return {n:d.n,abBefore:d.abBefore,cnt,avg:avg?+avg.toFixed(1):null,min:cnt?Math.min(...allGaps):null,max:cnt?Math.max(...allGaps):null};
+      }),'rpt-ret','n','asc').map(({n,abBefore,cnt,avg,min,max})=>{
+        if(!cnt) return `<tr><td>${ball(n,'ball-sm')}</td><td>${abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
         return `<tr>
-          <td>${ball(d.n,'ball-sm')}</td>
-          <td style="font-weight:600">${d.abBefore}期</td>
+          <td>${ball(n,'ball-sm')}</td>
+          <td style="font-weight:600">${abBefore}期</td>
           <td style="text-align:center">${cnt}次</td>
           <td style="text-align:center">${avg}期</td>
           <td style="text-align:center">${min}期</td>
@@ -994,12 +1017,9 @@ function renderAnnual(el){
     <h3>🎯 尾數年度偏移（選號核心規律）</h3>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有3個號碼（10,20,30），理論期望較低（56.2次 vs 其他尾數74.9次）</div>
     <table>
-      <thead><tr><th>尾數</th><th>2026實際</th><th>理論值</th><th>年度偏差</th><th>對應號碼</th><th>選號建議</th></tr></thead>
-      <tbody>${tailSorted.map(([t,bias])=>{
-        const ti=+t;
-        const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===ti);
+      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual','2026實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th><th>選號建議</th></tr></thead>
+      <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
         const exp=ti===0?+(T*5*3/39).toFixed(1):+(T*5*4/39).toFixed(1);
-        const actual=nums.reduce((s,n)=>s+freq[n],0);
         const clr=biasClr(bias);
         const bg=biasBg(bias);
         return `<tr style="background:${bg}">
@@ -1037,9 +1057,8 @@ function renderAnnual(el){
   <div class="card">
     <h3>🃏 最常見區間分配模式 Top 6</h3>
     <table>
-      <thead><tr><th>模式（一/二/三/四）</th><th>出現次數</th><th>占比</th><th>特徵</th></tr></thead>
-      <tbody>${A.topPats.map(([pat,cnt])=>{
-        const pct=((cnt/T)*100).toFixed(1);
+      <thead><tr><th>模式（一/二/三/四）</th>${thSort('ann-pat','cnt','出現次數')}${thSort('ann-pat','pct','占比')}<th>特徵</th></tr></thead>
+      <tbody>${applySort(A.topPats.map(([pat,cnt])=>({pat,cnt,pct:+((cnt/T)*100).toFixed(1)})), 'ann-pat','cnt','desc').map(({pat,cnt,pct})=>{
         const zones=pat.split('-').map(Number);
         const feat=zones[3]===0?'四區缺席':zones.every(z=>z<=2)?'均衡分佈':zones[2]>=3?'三區強勢':zones[0]>=2?'一區強勢':'混合';
         return `<tr>
@@ -1123,16 +1142,14 @@ function renderStats(el){
     <h3>📉 長期尾數偏移分析（選號核心規律）</h3>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">依50期偏移排序。此規律在50期、100期均高度穩定，為尾數優先流的理論依據。</p>
     <table>
-      <thead><tr><th>尾數</th><th>50期實際</th><th>50期理論</th><th>偏移</th><th>100期偏移</th><th>號碼</th></tr></thead>
-      <tbody>${tailsSorted50.map(t=>{
-        const b50=tailBias50(t);
-        const b100=+((tail100[t]/exp100(t)-1)*100).toFixed(1);
+      <thead><tr>${thSort('st-tail','t','尾數')}${thSort('st-tail','act50','50期實際')}<th>50期理論</th>${thSort('st-tail','b50','偏移')}${thSort('st-tail','b100','100期偏移')}<th>號碼</th></tr></thead>
+      <tbody>${applySort(Array.from({length:10},(_,i)=>({t:i,act50:tail50[i],b50:tailBias50(i),b100:+((tail100[i]/exp100(i)-1)*100).toFixed(1)})),'st-tail','b50','desc').map(({t,act50,b50,b100})=>{
         const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===t);
         const color=b50>=20?'#dc2626':b50<=-15?'#2563eb':b50>=10?'#d97706':'var(--text)';
         const bg=b50>=20?'#fee2e2':b50<=-15?'#dbeafe':'';
         return `<tr style="background:${bg}">
           <td><strong style="font-size:1rem;color:${color}">尾${t}</strong></td>
-          <td style="text-align:center;font-weight:600;color:${color}">${tail50[t]}</td>
+          <td style="text-align:center;font-weight:600;color:${color}">${act50}</td>
           <td style="text-align:center;color:var(--muted)">${exp50(t)}</td>
           <td style="text-align:center;font-weight:700;color:${color}">${b50>0?'+':''}${b50}%</td>
           <td style="text-align:center;color:${b100>=10?'#dc2626':b100<=-10?'#2563eb':'var(--muted)'}">${b100>0?'+':''}${b100}%</td>
@@ -1167,22 +1184,19 @@ function renderStats(el){
     ${numsWithHist.length === 0
       ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
       : `<table>
-      <thead><tr><th>號碼</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th><th>上次沉寂</th></tr></thead>
-      <tbody>${numsWithHist.map(n => {
-        const s = retStats(n);
-        const avgGap = st[n]?.ag || '–';
-        const diff = s.count >= 2 ? (parseFloat(s.avg) - parseFloat(avgGap)).toFixed(1) : null;
+      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','平均沉寂期')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
+      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','count','desc').map(({n,count,avg,min,max,last,diff}) => {
         const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
         return `<tr>
           <td>${ball(n,'ball-sm')}</td>
-          <td style="text-align:center;font-weight:600">${s.count}</td>
+          <td style="text-align:center;font-weight:600">${count}</td>
           <td style="text-align:center">
-            <strong>${s.avg}</strong>期
+            <strong>${avg}</strong>期
             ${diff !== null ? `<span style="font-size:.72rem;${diffColor}">(${parseFloat(diff)>0?'+':''}${diff})</span>` : ''}
           </td>
-          <td style="text-align:center">${s.min}期</td>
-          <td style="text-align:center">${s.max}期</td>
-          <td style="text-align:center;font-size:.78rem;color:var(--muted)">${s.last.gap}期<br>第${s.last.period}期</td>
+          <td style="text-align:center">${min}期</td>
+          <td style="text-align:center">${max}期</td>
+          <td style="text-align:center;font-size:.78rem;color:var(--muted)">${last.gap}期<br>第${last.period}期</td>
         </tr>`;
       }).join('')}</tbody>
     </table>
@@ -1208,16 +1222,14 @@ function renderStats(el){
       </div>
       <div class="sec-lbl">連莊率排行（出現≥3次的號碼）</div>
       <table>
-        <thead><tr><th>號碼</th><th>出現次數</th><th>連莊次數</th><th>連莊率</th><th>最常引導下一期</th></tr></thead>
-        <tbody>${topCon.map(n=>{
-          const cs=conStat[n];
-          const rate=+(cs.repeats/cs.total*100).toFixed(0);
+        <thead><tr>${thSort('st-con','n','號碼')}${thSort('st-con','total','出現次數')}${thSort('st-con','repeats','連莊次數')}${thSort('st-con','rate','連莊率')}<th>最常引導下一期</th></tr></thead>
+        <tbody>${applySort(topCon.map(n=>{const c=conStat[n];return {n,total:c.total,repeats:c.repeats,rate:+(c.repeats/c.total*100).toFixed(0),followedBy:c.followedBy};}), 'st-con','rate','desc').map(({n,total,repeats,rate,followedBy})=>{
           const rateClr=rate>=20?'#dc2626':rate>=13?'var(--warn)':'var(--muted)';
-          const top3=Object.entries(cs.followedBy).sort((a,b)=>b[1]-a[1]).slice(0,3);
+          const top3=Object.entries(followedBy).sort((a,b)=>b[1]-a[1]).slice(0,3);
           return `<tr>
             <td>${ball(n,'ball-sm')}</td>
-            <td style="text-align:center">${cs.total}</td>
-            <td style="text-align:center">${cs.repeats}</td>
+            <td style="text-align:center">${total}</td>
+            <td style="text-align:center">${repeats}</td>
             <td style="text-align:center;font-weight:700;color:${rateClr}">${rate}%</td>
             <td style="font-size:.77rem">${top3.map(([m,c])=>`${ball(+m,'ball-sm')}<span style="font-size:.66rem;color:var(--muted)">${c}次</span>`).join(' ')}</td>
           </tr>`;
@@ -1257,15 +1269,15 @@ function renderRecords(el){
   <div class="card">
     <h3>📜 開獎紀錄（共 ${rec.length} 期）</h3>
     <table>
-      <thead><tr><th>期號</th><th>開獎號碼</th><th>一/二/三/四</th><th></th></tr></thead>
-      <tbody>${rec.map((r,i)=>{
+      <thead><tr>${thSort('rec-list','p','期號')}<th>開獎號碼</th><th>一/二/三/四</th><th></th></tr></thead>
+      <tbody>${applySort(rec.map((r,i)=>({...r,_i:i})),'rec-list','p','desc').map(({p,n,_i})=>{
         const zd={1:0,2:0,3:0,4:0};
-        r.n.forEach(n=>{zd[Z(n)]++;});
+        n.forEach(num=>{zd[Z(num)]++;});
         return `<tr>
-          <td style="font-size:.8rem;color:var(--muted);font-weight:600">${r.p}</td>
-          <td>${r.n.map(n=>ball(n,'ball-sm')).join('')}</td>
+          <td style="font-size:.8rem;color:var(--muted);font-weight:600">${p}</td>
+          <td>${n.map(num=>ball(num,'ball-sm')).join('')}</td>
           <td style="font-size:.78rem;color:var(--muted)">${[1,2,3,4].map(z=>zd[z]).join('-')}</td>
-          <td><button onclick="delRec(${i})" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:.85rem;padding:4px">✕</button></td>
+          <td><button onclick="delRec(${_i})" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:.85rem;padding:4px">✕</button></td>
         </tr>`;
       }).join('')}</tbody>
     </table>
@@ -1405,8 +1417,8 @@ function renderTrack(el) {
       ⓘ 說明：以「當前狀態」生成的選號與歷史開獎比對。G4超期回歸流因選超期號（定義上近期少出現），此回測天生偏低，請以實際押注紀錄為準。
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>策略</th><th>本期選號</th><th>平均命中</th><th>1碼+</th><th>2碼+</th><th>3碼+</th><th>最高</th><th>評估</th></tr></thead>
-      <tbody>${bt.map(g => {
+      <thead><tr><th>策略</th><th>本期選號</th>${thSort('trk-bt','avg','平均命中')}${thSort('trk-bt','hit1','1碼+')}${thSort('trk-bt','hit2','2碼+')}${thSort('trk-bt','hit3','3碼+')}${thSort('trk-bt','maxM','最高')}<th>評估</th></tr></thead>
+      <tbody>${applySort(bt,'trk-bt','avg','desc').map(g => {
         if(!g.valid) return `<tr><td colspan="8" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
         const grade = g.avg>=1.5?'優秀':g.avg>=1.0?'良好':g.avg>=0.6?'普通':'偏低';
         const clr = g.avg>=1.5?'#dc2626':g.avg>=1.0?'#d97706':g.avg>=0.6?'var(--muted)':'#2563eb';
@@ -1447,14 +1459,13 @@ function renderSettings(el){
   <div class="card">
     <h3>📊 目前各號碼狀態</h3>
     <table>
-      <thead><tr><th>號碼</th><th>沉寂期</th><th>平均間隔</th><th>最大間隔</th><th>逾期倍數</th></tr></thead>
-      <tbody>${Array.from({length:39},(_,i)=>i+1).map(n=>{
-        const s=st[n], r=od(n), ex=excl(n);
+      <thead><tr>${thSort('cfg-st','n','號碼')}${thSort('cfg-st','ab','沉寂期')}${thSort('cfg-st','ag','平均間隔')}${thSort('cfg-st','mg','最大間隔')}${thSort('cfg-st','ratio','逾期倍數')}</tr></thead>
+      <tbody>${applySort(Array.from({length:39},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:st[n].ag,mg:st[n].mg,ratio:od(n),ex:excl(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio,ex})=>{
         return `<tr style="${ex?'background:#fee2e2':''}">
           <td>${ex?ballX(n,'ball-sm'):ball(n,'ball-sm')}</td>
-          <td>${s.ab}</td><td>${s.ag}</td><td>${s.mg}</td>
-          <td style="color:${ex?'#dc2626':r>=2?'var(--od)':r>=1?'var(--warn)':'var(--muted)'};font-weight:${r>=1||ex?'700':'400'}">
-            ${ex?'🚫排除':'×'+r}
+          <td>${ab}</td><td>${ag}</td><td>${mg}</td>
+          <td style="color:${ex?'#dc2626':ratio>=2?'var(--od)':ratio>=1?'var(--warn)':'var(--muted)'};font-weight:${ratio>=1||ex?'700':'400'}">
+            ${ex?'🚫排除':'×'+ratio}
           </td>
         </tr>`;
       }).join('')}</tbody>
