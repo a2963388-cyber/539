@@ -617,7 +617,7 @@ function ck(ok,label){
 }
 
 // ── TABS ───────────────────────────────────────────────────
-let tab='pick', lastReport=null;
+let tab='pick', lastReport=null, rptMode=0, rptHistFilter='';
 
 // ── SORT HELPERS ───────────────────────────────────────────
 const sortState = {};
@@ -663,8 +663,128 @@ function render(){
 }
 
 // ── RENDER: REPORT ─────────────────────────────────────────
+
+// 回算第 i 期抽獎前，號碼 n 的沉寂期數
+function dormancyBefore(i, n) {
+  for(let j=i+1; j<rec.length; j++) {
+    if(rec[j].n.includes(n)) return j-i-1;
+  }
+  return rec.length-i-1;
+}
+
+function toggleRptDetail(id) {
+  const el=document.getElementById(id);
+  if(el) el.style.display = el.style.display==='none'?'table-row':'none';
+}
+
+function renderReportHistory(el) {
+  const q = rptHistFilter.trim();
+  const qNum = parseInt(q);
+  const filterByNum = !isNaN(qNum) && qNum>=1 && qNum<=39;
+  const filterByPeriod = q.length>=4 && !filterByNum;
+
+  const allPeriods = rec.map((r,i) => {
+    const zd={1:0,2:0,3:0,4:0};
+    r.n.forEach(n=>zd[Z(n)]++);
+    const details = r.n.map(n => {
+      const d = dormancyBefore(i,n);
+      const ag = st[n]?.ag||8;
+      const ratio = +(d/ag).toFixed(2);
+      return {n, d, ratio};
+    });
+    const superOD = details.filter(x=>x.ratio>=2.0);
+    const overdue  = details.filter(x=>x.ratio>=1.0&&x.ratio<2.0);
+    return {p:r.p, nums:r.n, zd, details, superOD, overdue, i};
+  });
+
+  const periods = allPeriods.filter(p => {
+    if(filterByNum)    return p.nums.includes(qNum);
+    if(filterByPeriod) return String(p.p).includes(q);
+    return true;
+  });
+
+  const zoneColor = ['','#2563eb','#16a34a','#ea580c','#dc2626'];
+
+  el.innerHTML += `
+  <div class="card" style="padding:0">
+    <div style="padding:14px 14px 10px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input id="rpt-q" type="text" placeholder="搜尋期號（如 115149）或號碼（如 08）"
+          value="${rptHistFilter}"
+          oninput="rptHistFilter=this.value; renderReport(document.getElementById('tab-content'))"
+          style="flex:1;min-width:160px;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.85rem;outline:none">
+        ${q?`<button onclick="rptHistFilter='';renderReport(document.getElementById('tab-content'))"
+          style="border:none;background:#e2e8f0;border-radius:8px;padding:6px 10px;font-size:.8rem;cursor:pointer">✕ 清除</button>`:''}
+        <span style="font-size:.75rem;color:var(--muted);white-space:nowrap">${periods.length} / ${rec.length} 期</span>
+      </div>
+      ${filterByNum?`<div style="margin-top:8px;font-size:.78rem;color:#2563eb">🔍 顯示所有含 <b>${String(qNum).padStart(2,'0')}</b> 號的期數</div>`:''}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="font-size:.82rem">
+        <thead>
+          <tr style="background:#f8fafc;font-size:.74rem">
+            <th style="text-align:left;padding:7px 10px">期號</th>
+            <th style="padding:4px 6px;color:${zoneColor[1]}">一</th>
+            <th style="padding:4px 6px;color:${zoneColor[2]}">二</th>
+            <th style="padding:4px 6px;color:${zoneColor[3]}">三</th>
+            <th style="padding:4px 6px;color:${zoneColor[4]}">四</th>
+            <th style="text-align:left;padding:7px 8px">開獎號碼</th>
+            <th style="padding:4px 6px">特殊</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${periods.map(p=>{
+            const did = 'rh-'+p.p;
+            const zRow = [1,2,3,4].map(z=>{
+              const cnt=p.zd[z]||0;
+              const bold=cnt>=3?'font-weight:700':'opacity:.6';
+              return `<td style="text-align:center;padding:4px 6px;color:${zoneColor[z]};${bold}">${cnt||'·'}</td>`;
+            }).join('');
+            const flags = (p.superOD.length?'💥':'')+(p.overdue.length&&!p.superOD.length?'⚠️':'');
+            return `<tr onclick="toggleRptDetail('${did}')" style="cursor:pointer;border-top:1px solid var(--border)">
+              <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${p.p}</td>
+              ${zRow}
+              <td style="padding:6px 8px">${p.nums.map(n=>{
+                const det=p.details.find(x=>x.n===n);
+                const hi = filterByNum&&n===qNum ? 'outline:2px solid #2563eb;' : '';
+                return `<span class="ball ball-sm ${ZC[Z(n)]}" style="${hi}">${f2(n)}</span>`;
+              }).join('')}</td>
+              <td style="text-align:center;font-size:.85rem;padding:4px 6px">${flags||'—'}</td>
+            </tr>
+            <tr id="${did}" style="display:none">
+              <td colspan="7" style="padding:8px 14px 10px;background:#f8fafc">
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  ${p.details.map(x=>{
+                    const clr=x.ratio>=2.0?'#9333ea':x.ratio>=1.0?'#d97706':'#64748b';
+                    const note=x.d===0?'連莊':x.ratio>=2.0?'超期':x.ratio>=1.0?'逾期':'正常';
+                    return `<div style="display:flex;align-items:center;gap:4px;background:#fff;padding:4px 7px;border-radius:7px;border:1px solid var(--border)">
+                      <span class="ball ball-sm ${ZC[Z(x.n)]}">${f2(x.n)}</span>
+                      <span style="font-size:.68rem;color:${clr};font-weight:600">${x.d}期 ×${x.ratio} ${note}</span>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 function renderReport(el){
-  if(!lastReport){ el.innerHTML=`<div class="empty">尚無快報。<br>請輸入最新開獎號碼後按「送出」。</div>`; return; }
+  const modeBar = `<div style="display:flex;gap:0;margin-bottom:12px;background:#f1f5f9;border-radius:10px;padding:3px">
+    <button onclick="rptMode=0;render()" style="flex:1;border:none;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;${rptMode===0?'background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.12)':'background:none;color:var(--muted)'}">📋 本期快報</button>
+    <button onclick="rptMode=1;render()" style="flex:1;border:none;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;${rptMode===1?'background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.12)':'background:none;color:var(--muted)'}">📚 歷史查詢 (${rec.length}期)</button>
+  </div>`;
+
+  if(rptMode===1){
+    el.innerHTML = modeBar;
+    renderReportHistory(el);
+    return;
+  }
+
+  if(!lastReport){ el.innerHTML=modeBar+`<div class="empty">尚無快報。<br>請輸入最新開獎號碼後按「送出」。</div>`; return; }
   const R=lastReport;
 
   function note(d){
@@ -686,7 +806,7 @@ function renderReport(el){
 
   const zd=R.zoneDist;
 
-  el.innerHTML=`
+  el.innerHTML=modeBar+`
   <div class="card">
     <h3>📋 第 ${R.period} 期 快報</h3>
     <div class="sec-lbl">本期開出號碼</div>
