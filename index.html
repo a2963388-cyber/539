@@ -161,6 +161,7 @@ textarea:focus { border-color: var(--primary); }
   <button class="tab-btn" onclick="go('records')">📜 紀錄</button>
   <button class="tab-btn" onclick="go('settings')">⚙️ 設定</button>
   <button class="tab-btn" onclick="go('track')">🏆 中獎追蹤</button>
+  <button class="tab-btn" onclick="go('companion')">🤝 同伴</button>
 </nav>
 
 <main id="content"></main>
@@ -313,6 +314,7 @@ const ANN_EXP = 146*5/39; // 理論期望值≈18.7
 let rec = [], st = {}, retHist = {}, conStat = {};
 let pendingPick = null;  // {strategies:{G1:[...], ...}, ts: timestamp}
 let pickLog = [];        // [{period, strategies, result, hits, ts}]
+let compNum = 8;         // 同伴分析選中的號碼
 // retHist[num] = [{period, gap}, ...]
 // conStat[num] = {total, repeats, followedBy:{m:count,...}}
 //   total      = times num appeared as "previous draw" predecessor
@@ -332,6 +334,19 @@ function buildConStat(records) {
     });
   }
   return s;
+}
+
+function buildPairStat() {
+  const pairs = {};
+  rec.forEach(r => {
+    const sorted = [...r.n].sort((a,b)=>a-b);
+    for(let i=0;i<sorted.length-1;i++)
+      for(let j=i+1;j<sorted.length;j++) {
+        const k = `${sorted[i]}-${sorted[j]}`;
+        pairs[k] = (pairs[k]||0)+1;
+      }
+  });
+  return pairs;
 }
 
 function reconstructLastReport() {
@@ -646,7 +661,7 @@ function applySort(arr, tid, defCol, defDir) {
 function go(t){
   tab=t;
   document.querySelectorAll('.tab-btn').forEach((b,i)=>{
-    b.classList.toggle('active',['report','pick','annual','stats','records','settings','track'][i]===t);
+    b.classList.toggle('active',['report','pick','annual','stats','records','settings','track','companion'][i]===t);
   });
   render();
 }
@@ -659,6 +674,7 @@ function render(){
   else if(tab==='stats') renderStats(el);
   else if(tab==='records') renderRecords(el);
   else if(tab==='track') renderTrack(el);
+  else if(tab==='companion') renderCompanion(el);
   else renderSettings(el);
 }
 
@@ -1451,16 +1467,18 @@ function backtestGroups() {
     {key:'G7', label:'📡雙信號預測', g:g7},
     {key:'G8', label:'🎰年度+動能', g:g8},
   ];
-  const draws = rec.slice(0, Math.min(20, rec.length));
+  const draws = rec.slice(0, rec.length);
   return grps.map(({key,label,g}) => {
     if(!g) return {key, label, valid:false};
     const mc = draws.map(r => g.nums.filter(n => r.n.includes(n)).length);
     const total = mc.length;
     const avg = total ? +(mc.reduce((a,b)=>a+b,0)/total).toFixed(2) : 0;
     const randExp = +(5*5/39).toFixed(2);
+    const hit1cnt = mc.filter(m=>m>=1).length;
     return {key, label, nums:g.nums, avg, randExp,
       hit3: mc.filter(m=>m>=3).length, hit2: mc.filter(m=>m>=2).length,
-      hit1: mc.filter(m=>m>=1).length, maxM: total?Math.max(...mc):0, total, valid:true};
+      hit1: hit1cnt, winRate: total ? +(hit1cnt/total*100).toFixed(0) : 0,
+      maxM: total?Math.max(...mc):0, total, valid:true};
   });
 }
 
@@ -1560,19 +1578,19 @@ function renderTrack(el) {
   <div class="card">
     <h3>📊 策略近期回測（當前選號 vs 近 ${N} 期開獎）</h3>
     <div class="alert alert-blue" style="font-size:.76rem;margin-bottom:10px">
-      ⓘ 說明：以「當前狀態」生成的選號與歷史開獎比對。G4超期回歸流因選超期號（定義上近期少出現），此回測天生偏低，請以實際押注紀錄為準。
+      ⓘ 說明：以「當前狀態」生成的選號與全部 ${N} 期歷史開獎比對。數字越多代表策略在歷史上命中率越高。G4因選超期號天生偏低，請以實際押注紀錄為準。
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>策略</th><th>本期選號</th>${thSort('trk-bt','avg','平均命中')}${thSort('trk-bt','hit1','1碼+')}${thSort('trk-bt','hit2','2碼+')}${thSort('trk-bt','hit3','3碼+')}${thSort('trk-bt','maxM','最高')}<th>評估</th></tr></thead>
+      <thead><tr><th>策略</th><th>本期選號</th>${thSort('trk-bt','avg','平均命中')}${thSort('trk-bt','winRate','勝率%')}${thSort('trk-bt','hit2','2碼+')}${thSort('trk-bt','hit3','3碼+')}${thSort('trk-bt','maxM','最高')}<th>評估</th></tr></thead>
       <tbody>${applySort(bt,'trk-bt','avg','desc').map(g => {
-        if(!g.valid) return `<tr><td colspan="8" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
+        if(!g.valid) return `<tr><td colspan="9" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
         const grade = g.avg>=1.5?'優秀':g.avg>=1.0?'良好':g.avg>=0.6?'普通':'偏低';
         const clr = g.avg>=1.5?'#dc2626':g.avg>=1.0?'#d97706':g.avg>=0.6?'var(--muted)':'#2563eb';
         return `<tr>
           <td style="font-size:.78rem;font-weight:600">${g.label}</td>
           <td style="font-size:.68rem;color:var(--muted)">${g.nums.map(f2).join(' ')}</td>
           <td style="text-align:center;font-weight:700;color:${clr}">${g.avg}</td>
-          <td style="text-align:center;font-size:.8rem">${g.hit1}/${g.total}</td>
+          <td style="text-align:center;font-size:.8rem;font-weight:600;color:${g.winRate>=60?'#16a34a':g.winRate>=45?'#d97706':'#94a3b8'}">${g.winRate}%</td>
           <td style="text-align:center;font-size:.8rem">${g.hit2}/${g.total}</td>
           <td style="text-align:center;font-size:.8rem">${g.hit3}/${g.total}</td>
           <td style="text-align:center">${g.maxM}</td>
@@ -1580,7 +1598,7 @@ function renderTrack(el) {
         </tr>`;
       }).join('')}</tbody>
     </table></div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼（5×5/39）</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼 ｜ 理論勝率 ≈ 51%（5×5/39 至少1碼機率）</div>
   </div>
 
   <div class="card">
@@ -1616,6 +1634,74 @@ function renderSettings(el){
         </tr>`;
       }).join('')}</tbody>
     </table>
+  </div>`;
+}
+
+// ── RENDER: COMPANION ──────────────────────────────────────
+function renderCompanion(el) {
+  const pairs = buildPairStat();
+  const total = rec.length;
+  const randExp = +(total * 2 / (39 * 38 / 2) * C2_ADJ()).toFixed(1);
+
+  function C2_ADJ() { return 5*4/2; } // 每期 C(5,2)=10 個 pair
+
+  // 排行榜
+  const topPairs = Object.entries(pairs)
+    .map(([k,cnt]) => { const [a,b]=k.split('-').map(Number); return {a,b,cnt,pct:+(cnt/total*100).toFixed(1)}; })
+    .sort((x,y)=>y.cnt-x.cnt).slice(0,20);
+
+  // 單號查詢
+  const companions = Array.from({length:39},(_,i)=>i+1)
+    .filter(n=>n!==compNum)
+    .map(n => {
+      const k = compNum<n?`${compNum}-${n}`:`${n}-${compNum}`;
+      return {n, cnt:pairs[k]||0, pct:+((pairs[k]||0)/total*100).toFixed(1)};
+    }).sort((a,b)=>b.cnt-a.cnt);
+
+  const maxCnt = topPairs[0]?.cnt || 1;
+  const randLine = +(total*10/(39*38/2)).toFixed(1);
+
+  el.innerHTML = `
+  <div class="card">
+    <h3>🤝 高頻同伴排行 TOP 20（共 ${total} 期）</h3>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">同一期同時出現次數最多的號碼對，隨機期望 ≈ ${randLine} 次</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>#</th><th>號碼對</th><th style="text-align:center">共現次數</th><th style="text-align:center">頻率</th><th>相對強度</th></tr></thead>
+      <tbody>${topPairs.map(({a,b,cnt,pct},i)=>`
+        <tr>
+          <td style="color:var(--muted);font-size:.75rem">${i+1}</td>
+          <td>${ball(a,'ball-sm')} ${ball(b,'ball-sm')}</td>
+          <td style="font-weight:700;text-align:center">${cnt}</td>
+          <td style="text-align:center;color:var(--muted);font-size:.8rem">${pct}%</td>
+          <td style="min-width:80px"><div class="bar-wrap"><div class="bar-fill" style="width:${cnt/maxCnt*100}%;background:var(--primary)"></div></div></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>🔍 單號同伴查詢</h3>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">
+      ${Array.from({length:39},(_,i)=>i+1).map(n=>`
+        <span onclick="compNum=${n};renderCompanion(document.getElementById('content'))"
+          class="ball ball-sm ${ZC[Z(n)]}"
+          style="cursor:pointer;outline:${compNum===n?'2.5px solid #1e293b':'2px solid transparent'};outline-offset:1px">${f2(n)}</span>`).join('')}
+    </div>
+    <div style="font-size:.85rem;font-weight:700;margin-bottom:8px">
+      ${ball(compNum,'ball-sm')} 號碼 ${f2(compNum)} 的同伴頻率（前 10 名）
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>同伴</th><th style="text-align:center">同期次數</th><th style="text-align:center">頻率</th><th>強度</th></tr></thead>
+      <tbody>${companions.slice(0,10).map(({n,cnt,pct})=>`
+        <tr>
+          <td>${ball(n,'ball-sm')}</td>
+          <td style="font-weight:700;text-align:center">${cnt}</td>
+          <td style="text-align:center;font-size:.8rem;color:var(--muted)">${pct}%</td>
+          <td style="min-width:80px"><div class="bar-wrap"><div class="bar-fill" style="width:${companions[0].cnt?cnt/companions[0].cnt*100:0}%;background:var(--z2)"></div></div></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機期望 ≈ ${randLine} 次（${total} 期 × 理論同現機率）</div>
   </div>`;
 }
 
