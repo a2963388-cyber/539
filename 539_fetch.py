@@ -152,13 +152,15 @@ def update_html(new_draws: list, dry_run: bool = False):
     ))
 
     # 解析現有 BASE_REC
-    rec_match = re.search(r"(const BASE_REC = \[)(.*?)(\];)", html, re.DOTALL)
+    rec_match = re.search(r"(const BASE_REC = \[)(.*?)(\n\];?)", html, re.DOTALL)
     if not rec_match:
         print("❌ 無法解析 BASE_REC")
         return
 
     existing_js = rec_match.group(2)
-    existing_json = "[" + re.sub(r"(\b[a-z]\w*\b):", r'"\1":', existing_js) + "]"
+    # 移除尾部逗號（JS 合法但 JSON 不接受）
+    cleaned = existing_js.strip().rstrip(",").strip()
+    existing_json = "[" + re.sub(r"(\b[a-z]\w*\b):", r'"\1":', cleaned) + "]"
     try:
         existing = json.loads(existing_json)
     except json.JSONDecodeError as e:
@@ -177,7 +179,7 @@ def update_html(new_draws: list, dry_run: bool = False):
         parts = [f"{{p:{r['p']},n:[{','.join(str(n) for n in r['n'])}]}}" for r in chunk]
         suffix = "," if i + 5 < len(all_records) else ""
         rec_lines.append("  " + ",".join(parts) + suffix)
-    new_base_rec = "const BASE_REC = [\n" + "\n".join(rec_lines) + "\n]"
+    new_base_rec = "const BASE_REC = [\n" + "\n".join(rec_lines) + "\n];"
 
     html = html[: rec_match.start()] + new_base_rec + html[rec_match.end() :]
 
