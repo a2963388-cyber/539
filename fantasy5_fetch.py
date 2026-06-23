@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-539_fetch.py — 自動抓取今彩539最新開獎，更新 index.html
+fantasy5_fetch.py — 自動抓取 CA Fantasy 5 最新開獎，更新 fantasy5.html
 
 用法：
-  python3 539_fetch.py          # 抓取並更新
-  python3 539_fetch.py --dry    # 只顯示，不寫入
+  python3 fantasy5_fetch.py          # 抓取並更新
+  python3 fantasy5_fetch.py --dry    # 只顯示，不寫入
 
 依賴：pip3 install requests beautifulsoup4
 """
@@ -20,93 +20,83 @@ from datetime import date, timedelta
 
 try:
     import requests
-    from bs4 import BeautifulSoup
 except ImportError:
-    print("❌ 請先安裝：pip3 install requests beautifulsoup4")
+    print("❌ 請先安裝：pip3 install requests")
     sys.exit(1)
 
-INDEX_HTML = Path(__file__).parent / "index.html"
+INDEX_HTML = Path(__file__).parent / "fantasy5.html"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
 
-# 已知錨點：第 115149 期 = 2026-06-19
-ANCHOR_PERIOD = 115149
-ANCHOR_DATE   = date(2026, 6, 19)
+# 已知錨點：Draw 11916 = 2026-06-22（每天開獎，包含週日）
+ANCHOR_DRAW = 11916
+ANCHOR_DATE = date(2026, 6, 22)
+
+BASE_URL = "https://en.lottolyzer.com/history/united-states/fantasy-5-california/page/{}/per-page/50/summary-view"
 
 
-# ── 日期 <-> 期號換算 ─────────────────────────────────────────
-def is_draw_day(d: date) -> bool:
-    return d.weekday() != 6  # 6 = Sunday
+# ── Draw# ↔ 日期換算 ──────────────────────────────────────────
+def draw_to_date(draw: int) -> date:
+    return ANCHOR_DATE + timedelta(days=draw - ANCHOR_DRAW)
 
-def draw_days_between(start: date, end: date) -> int:
-    if start == end:
-        return 0
-    step = 1 if end > start else -1
-    count = 0
-    d = start + timedelta(days=step)
-    while True:
-        if is_draw_day(d):
-            count += step
-        if d == end:
-            break
-        d += timedelta(days=step)
-    return count
-
-def date_to_period(d: date) -> int:
-    diff = draw_days_between(ANCHOR_DATE, d)
-    return ANCHOR_PERIOD + diff
-
-def period_to_date(period: int) -> date:
-    diff = period - ANCHOR_PERIOD
-    if diff == 0:
-        return ANCHOR_DATE
-    step = 1 if diff > 0 else -1
-    d = ANCHOR_DATE
-    remaining = abs(diff)
-    while remaining > 0:
-        d += timedelta(days=step)
-        if is_draw_day(d):
-            remaining -= 1
-    return d
+def date_to_draw(d: date) -> int:
+    return ANCHOR_DRAW + (d - ANCHOR_DATE).days
 
 
-# ── 讀取 index.html 最新期號 ──────────────────────────────────
+# ── 讀取 fantasy5.html 最新 draw# ────────────────────────────
 def read_current_latest(html: str) -> int:
     m = re.search(r"const BASE_REC = \[\s*\{p:(\d+)", html)
     return int(m.group(1)) if m else 0
 
 
-# ── 抓取 pilio.idv.tw 開獎資料 ───────────────────────────────
-def fetch_draws(from_period: int) -> list:
-    url = "https://www.pilio.idv.tw/lto539/list.asp"
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=20)
-        r.raise_for_status()
-    except requests.RequestException as e:
-        print(f"❌ 抓取失敗：{e}")
-        return []
+# ── 抓取 lottolyzer.com 開獎資料 ─────────────────────────────
+def fetch_draws(from_draw: int) -> list:
+    """
+    從 lottolyzer.com 抓取 Fantasy 5 最新開獎。
+    回傳 [{p:draw#, dt:date_str, n:[5 nums]}, ...] 最新在前。
+    """
+    results = []
+    page = 1
+    max_pages = 3
 
-    html = r.text
-    pattern = r'date-cell[^>]*>(\d{2}/\d{2})<br>\d+(.*?number-cell.*?)([\d,\s&nbsp;]+)</td>'
-    rows = re.findall(pattern, html, re.DOTALL)
+    while page <= max_pages:
+        url = BASE_URL.format(page)
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=20)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            print(f"❌ 抓取失敗（page {page}）：{e}")
+            break
 
-    draws = []
-    current_year = ANCHOR_DATE.year
+        html = r.text
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
+        page_draws = []
+        found_old = False
 
-    for date_str, _, nums_raw in rows:
-        month, day = map(int, date_str.split("/"))
-        d = date(current_year, month, day)
-        period = date_to_period(d)
-        if period <= from_period:
-            continue
-        nums = [int(x) for x in re.findall(r"\d{1,2}", nums_raw) if 1 <= int(x) <= 39]
-        if len(nums) == 5:
-            draws.append({"p": period, "n": sorted(nums)})
+        for row in rows:
+            tds = [re.sub(r'<[^>]+>', '', t).strip()
+                   for t in re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)]
+            if len(tds) >= 3 and tds[0].isdigit() and re.match(r'20\d\d-\d\d-\d\d', tds[1] if len(tds) > 1 else ''):
+                draw_num = int(tds[0])
+                draw_date = tds[1]
+                nums = [int(x) for x in tds[2].split(',')
+                        if x.strip().isdigit() and 1 <= int(x) <= 39]
+                if draw_num <= from_draw:
+                    found_old = True
+                    continue
+                if len(nums) == 5:
+                    page_draws.append({'p': draw_num, 'dt': draw_date, 'n': sorted(nums)})
 
-    if draws:
-        print(f"✅ 找到 {len(draws)} 筆新資料")
-    return sorted(draws, key=lambda x: x["p"], reverse=True)
+        results.extend(page_draws)
+        if found_old or not page_draws:
+            break
+        page += 1
+        time.sleep(0.5)
+
+    if results:
+        print(f"✅ 找到 {len(results)} 筆新資料")
+    return sorted(results, key=lambda x: x['p'], reverse=True)
 
 
 # ── 計算各號碼沉寂期數 ────────────────────────────────────────
@@ -115,14 +105,14 @@ def calc_absent(records: list) -> dict:
     for n in range(1, 40):
         count = 0
         for r in records:
-            if n in r["n"]:
+            if n in r['n']:
                 break
             count += 1
         ab[n] = count
     return ab
 
 
-# ── 預測邏輯（JS G1–G8 + G7 的 Python 移植版）────────────────
+# ── 預測邏輯（完全與 539_fetch.py 相同）──────────────────────
 def z_zone(n: int) -> int:
     if n <= 9: return 1
     if n <= 19: return 2
@@ -227,20 +217,20 @@ def ensure_consec(nums: list, cand: list, score_fn, annual: dict) -> list:
 
 def _build_dual(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
-    s3max  = max((ann_score(n, annual) for n in cand), default=0.01)
+    s3max   = max((ann_score(n, annual) for n in cand), default=0.01)
     mom_max = max((mom_fn(n) for n in cand), default=0.01)
     def dual_fn(n):
         return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
     return dual_fn, mom_fn
 
-def gen_g1(cand: list, annual: dict) -> list:
+def gen_g1(cand, annual):
     return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:5])
 
-def gen_g2(cand: list, records: list, annual: dict) -> list:
+def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:5])
 
-def gen_g3(cand: list, records: list, annual: dict) -> list:
+def gen_g3(cand, records, annual):
     dual_fn, _ = _build_dual(cand, records, annual)
     by_z = {}
     for zn in [1, 2, 3, 4]:
@@ -253,47 +243,41 @@ def gen_g3(cand: list, records: list, annual: dict) -> list:
                 pool.append(n)
                 seen.add(n)
     pool.sort(key=dual_fn, reverse=True)
-    nums = sorted(pool[:5])
-    return ensure_consec(nums, cand, dual_fn, annual)
+    return ensure_consec(sorted(pool[:5]), cand, dual_fn, annual)
 
-def gen_g4(cand: list, records: list, annual: dict) -> list:
+def gen_g4(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     cold_thresh = int(annual['periods'] * 5 / 39 * 0.9)
-    picks = sorted(
-        [n for n in cand if annual['freq'][n] <= cold_thresh and mom_fn(n) >= 1.1],
-        key=mom_fn, reverse=True
-    )
+    picks = sorted([n for n in cand if annual['freq'][n] <= cold_thresh and mom_fn(n) >= 1.1],
+                   key=mom_fn, reverse=True)
     if len(picks) < 5:
-        extra = sorted(
-            [n for n in cand if mom_fn(n) >= 1.0 and n not in picks],
-            key=mom_fn, reverse=True
-        )
+        extra = sorted([n for n in cand if mom_fn(n) >= 1.0 and n not in picks],
+                       key=mom_fn, reverse=True)
         picks = picks + extra
     if len(picks) < 5:
         picks = sorted(cand, key=mom_fn, reverse=True)
     return sorted(picks[:5])
 
-def gen_g5(cand: list, records: list, annual: dict) -> list:
+def gen_g5(cand, records, annual):
     dual_fn, _ = _build_dual(cand, records, annual)
     hot_tails = [t for t, b in annual['tailBias'].items() if b >= 8]
     effective_hot = hot_tails if hot_tails else [1, 5, 6, 8]
     hot_pool  = sorted([n for n in cand if n % 10 in effective_hot], key=dual_fn, reverse=True)
     cold_pool = sorted([n for n in cand if n % 10 not in effective_hot], key=dual_fn, reverse=True)
     hot_picks = hot_pool[:min(4, len(hot_pool))]
-    hot_set   = set(hot_picks)
-    rest = [n for n in cold_pool if n not in hot_set][:5 - len(hot_picks)]
+    rest = [n for n in cold_pool if n not in set(hot_picks)][:5 - len(hot_picks)]
     return sorted((hot_picks + rest)[:5])
 
-def gen_g6(cand: list, records: list, annual: dict) -> list:
+def gen_g6(cand, records, annual):
     _, mom_fn = _build_dual(cand, records, annual)
     mom_max = max((mom_fn(n) for n in cand), default=0.01)
-    hot_num = annual['hotNum']
-    must  = [hot_num] if hot_num in cand else []
+    must  = [annual['hotNum']] if annual['hotNum'] in cand else []
     pool  = [n for n in cand if n not in must]
-    scored = sorted(pool, key=lambda n: ann_score(n, annual) * 0.6 + (mom_fn(n) / mom_max) * 100 * 0.4, reverse=True)
+    scored = sorted(pool, key=lambda n: ann_score(n, annual) * 0.6 + (mom_fn(n) / mom_max) * 100 * 0.4,
+                    reverse=True)
     return sorted(must + scored[:5 - len(must)])
 
-def gen_g8(cand: list, records: list, annual: dict) -> list:
+def gen_g8(cand, records, annual):
     rN = min(30, len(records))
     rf = [0] * 40
     for r in records[:rN]:
@@ -312,7 +296,7 @@ def gen_g8(cand: list, records: list, annual: dict) -> list:
         return None
     return ensure_consec(sorted(top5raw), cand, dual_fn, annual)
 
-def predict_g7(records: list, st_mg: dict, annual: dict) -> list:
+def predict_g7(records, st_mg, annual):
     ab    = calc_absent(records)
     cand  = [n for n in range(1, 40) if ab[n] < st_mg.get(n, 999)] or list(range(1, 40))
     s3max = max((ann_score(n, annual) for n in cand), default=0.01)
@@ -326,7 +310,6 @@ def predict_g7(records: list, st_mg: dict, annual: dict) -> list:
         e = annual['freq'][n] / ann_per
         return 0 if e < 0.001 else (rf[n] / rN) / e
     s4max = max((s4fn(n) for n in cand), default=0.01)
-
     prelim = sorted(cand, key=lambda n: ann_score(n, annual)/s3max*60 + s4fn(n)/s4max*40, reverse=True)
     friend_pool = prelim[:15]
     pairs = build_pair_stat(records)
@@ -338,17 +321,17 @@ def predict_g7(records: list, st_mg: dict, annual: dict) -> list:
             s += pairs.get(k, 0)
         return s
     pair_max = max((pair_score(n) for n in cand), default=1) or 1
-
-    scored = sorted(cand, key=lambda n: ann_score(n, annual)/s3max*55 + s4fn(n)/s4max*35 + pair_score(n)/pair_max*10, reverse=True)
+    scored = sorted(cand,
+                    key=lambda n: ann_score(n,annual)/s3max*55 + s4fn(n)/s4max*35 + pair_score(n)/pair_max*10,
+                    reverse=True)
     return sorted(scored[:5])
 
-def gen_all_predictions(records: list, st_mg: dict) -> dict:
+def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual:
         return {}
     ab   = calc_absent(records)
     cand = [n for n in range(1, 40) if ab[n] < st_mg.get(n, 999)] or list(range(1, 40))
-
     strategies = {
         'G1': gen_g1(cand, annual),
         'G2': gen_g2(cand, records, annual),
@@ -375,7 +358,7 @@ def read_base_st(html: str) -> dict:
     return st_mg
 
 
-# ── 通用：替換 JS 常數值（能處理巢狀括號與字串）─────────────────
+# ── 通用：替換 JS 常數值 ──────────────────────────────────────
 def replace_js_const(html: str, name: str, new_val: str, comment: str = "") -> str:
     marker = f"const {name} = "
     idx = html.find(marker)
@@ -391,21 +374,14 @@ def replace_js_const(html: str, name: str, new_val: str, comment: str = "") -> s
         if escape:
             escape = False
         elif in_str:
-            if c == '\\':
-                escape = True
-            elif c == '"':
-                in_str = False
+            if c == '\\': escape = True
+            elif c == '"': in_str = False
         else:
-            if c == '"':
-                in_str = True
-            elif c in '{[':
-                depth += 1
-            elif c in '}]':
-                depth -= 1
-            elif c == ';' and depth == 0:
-                break
+            if c == '"': in_str = True
+            elif c in '{[': depth += 1
+            elif c in '}]': depth -= 1
+            elif c == ';' and depth == 0: break
         pos += 1
-    # Skip rest of original line (removes old inline comments)
     end = pos + 1
     while end < len(html) and html[end] != '\n':
         end += 1
@@ -448,9 +424,7 @@ def _extract_js_value(html: str, name: str):
         return None
 
 def read_pick_state(html: str):
-    picklog = _extract_js_value(html, 'BASE_PICKLOG') or []
-    pending = _extract_js_value(html, 'BASE_PENDING')
-    return picklog, pending
+    return _extract_js_value(html, 'BASE_PICKLOG') or [], _extract_js_value(html, 'BASE_PENDING')
 
 def write_pick_state(html: str, picklog: list, pending) -> str:
     pl_val = json.dumps(picklog, ensure_ascii=False, separators=(',', ':'))
@@ -459,35 +433,35 @@ def write_pick_state(html: str, picklog: list, pending) -> str:
         html = replace_js_const(html, 'BASE_PENDING', 'null',
                                  '// {strategies:{G1:[...],...}, forPeriod:N, ts:N}')
     else:
-        pd_val = json.dumps(pending, ensure_ascii=False, separators=(',', ':'))
-        html = replace_js_const(html, 'BASE_PENDING', pd_val)
+        html = replace_js_const(html, 'BASE_PENDING',
+                                 json.dumps(pending, ensure_ascii=False, separators=(',', ':')))
     return html
 
 
-# ── 更新 index.html ───────────────────────────────────────────
+# ── 更新 fantasy5.html ────────────────────────────────────────
 def update_html(new_draws: list, dry_run: bool = False):
     html = INDEX_HTML.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
 
     actually_new = sorted(
-        [d for d in new_draws if d["p"] > current_latest],
-        key=lambda x: x["p"], reverse=True
+        [d for d in new_draws if d['p'] > current_latest],
+        key=lambda x: x['p'], reverse=True
     )
 
     if not actually_new:
-        print(f"✅ 已是最新（第 {current_latest} 期），無需更新")
+        print(f"✅ 已是最新（Draw {current_latest}），無需更新")
         return
 
     print("新增：" + "、".join(
-        f"{d['p']}期({','.join(str(n).zfill(2) for n in d['n'])})"
+        f"Draw{d['p']}({d['dt']})({','.join(str(n).zfill(2) for n in d['n'])})"
         for d in actually_new
     ))
 
-    # ── 讀取目前 pick 狀態 ──────────────────────────────────────
+    # ── 讀取 pick 狀態 ─────────────────────────────────────────
     st_mg = read_base_st(html)
     base_picklog, base_pending = read_pick_state(html)
 
-    # ── 解析現有 BASE_REC ───────────────────────────────────────
+    # ── 解析現有 BASE_REC ──────────────────────────────────────
     rec_match = re.search(r"(const BASE_REC = \[)(.*?)(\n\];?)", html, re.DOTALL)
     if not rec_match:
         print("❌ 無法解析 BASE_REC")
@@ -495,7 +469,8 @@ def update_html(new_draws: list, dry_run: bool = False):
 
     existing_js = rec_match.group(2)
     cleaned = existing_js.strip().rstrip(",").strip()
-    existing_json = "[" + re.sub(r"(\b[a-z]\w*\b):", r'"\1":', cleaned) + "]"
+    # Convert JS object notation to JSON (p→"p", dt→"dt", n→"n")
+    existing_json = "[" + re.sub(r'\b([a-z][a-zA-Z]*)\b:', r'"\1":', cleaned) + "]"
     try:
         existing = json.loads(existing_json)
     except json.JSONDecodeError as e:
@@ -506,17 +481,16 @@ def update_html(new_draws: list, dry_run: bool = False):
     total  = len(all_records)
     oldest = all_records[-1]["p"]
     newest = all_records[0]["p"]
+    newest_dt = all_records[0].get("dt", "")
 
-    # ── 計算命中（BASE_PENDING 對照最舊的新期）──────────────────
+    # ── 計算命中 ────────────────────────────────────────────────
     new_log_entries = []
     if base_pending and base_pending.get('strategies'):
         oldest_new = sorted(actually_new, key=lambda x: x['p'])[0]
-        logged_periods = {e.get('period') for e in base_picklog}
-        if oldest_new['p'] not in logged_periods:
-            hits = {
-                gname: len(set(gnums) & set(oldest_new['n']))
-                for gname, gnums in base_pending['strategies'].items()
-            }
+        logged = {e.get('period') for e in base_picklog}
+        if oldest_new['p'] not in logged:
+            hits = {gname: len(set(gnums) & set(oldest_new['n']))
+                    for gname, gnums in base_pending['strategies'].items()}
             new_log_entries.append({
                 'period':     oldest_new['p'],
                 'strategies': base_pending['strategies'],
@@ -525,19 +499,19 @@ def update_html(new_draws: list, dry_run: bool = False):
                 'ts':         base_pending.get('ts', 0),
             })
             hit_str = ', '.join(f"{k}:{v}" for k, v in hits.items())
-            print(f"→ 命中紀錄 第{oldest_new['p']}期：{hit_str}")
+            print(f"→ 命中紀錄 Draw{oldest_new['p']}({oldest_new['dt']})：{hit_str}")
 
-    # ── 重建 BASE_REC（5 筆一行）────────────────────────────────
+    # ── 重建 BASE_REC ──────────────────────────────────────────
     rec_lines = []
     for i in range(0, len(all_records), 5):
         chunk  = all_records[i:i+5]
-        parts  = [f"{{p:{r['p']},n:[{','.join(str(n) for n in r['n'])}]}}" for r in chunk]
+        parts  = [f'{{p:{r["p"]},dt:"{r.get("dt","")}",n:[{",".join(str(n) for n in r["n"])}]}}' for r in chunk]
         suffix = "," if i + 5 < len(all_records) else ""
         rec_lines.append("  " + ",".join(parts) + suffix)
     new_base_rec = "const BASE_REC = [\n" + "\n".join(rec_lines) + "\n];"
     html = html[:rec_match.start()] + new_base_rec + html[rec_match.end():]
 
-    # ── 更新 ab 值 ──────────────────────────────────────────────
+    # ── 更新 ab 值 ─────────────────────────────────────────────
     ab = calc_absent(all_records)
     for n in range(1, 40):
         html = re.sub(
@@ -546,66 +520,59 @@ def update_html(new_draws: list, dry_run: bool = False):
             html
         )
 
-    # ── 更新頂部注釋 ─────────────────────────────────────────────
+    # ── 更新頂部注釋 ────────────────────────────────────────────
     today = date.today().strftime("%Y-%m-%d")
     html = re.sub(
         r"// ── BASE DATA（.*?）──",
-        f"// ── BASE DATA（{oldest}–{newest}，共{total}期，對應遺漏統計表 {today}）──",
+        f"// ── BASE DATA（{oldest}–{newest}，共{total}期，{newest_dt}，更新 {today}）──",
         html,
     )
 
-    # ── 產生新預測 ───────────────────────────────────────────────
+    # ── 產生新預測 ─────────────────────────────────────────────
     new_strategies = gen_all_predictions(all_records, st_mg)
-    new_pending = {
-        'strategies': new_strategies,
-        'ts': int(time.time() * 1000),
-    }
+    new_pending = {'strategies': new_strategies, 'ts': int(time.time() * 1000)}
 
-    # ── 更新 pick 狀態 ───────────────────────────────────────────
-    updated_picklog = new_log_entries + base_picklog
-    html = write_pick_state(html, updated_picklog, new_pending)
+    # ── 更新 pick 狀態 ─────────────────────────────────────────
+    html = write_pick_state(html, new_log_entries + base_picklog, new_pending)
 
     if new_strategies:
-        preview = {k: v for k, v in new_strategies.items()}
-        print(f"→ 已產生下期預測：" + ' | '.join(
-            f"{k}:[{','.join(f'{n:02d}' for n in v)}]"
-            for k, v in preview.items()
+        print("→ 下期預測：" + ' | '.join(
+            f"{k}:[{','.join(f'{n:02d}' for n in v)}]" for k, v in new_strategies.items()
         ))
 
     if dry_run:
-        print(f"\n[Dry Run] 將更新至第 {newest} 期，共 {total} 期，不寫入")
+        print(f"\n[Dry Run] 將更新至 Draw {newest}（{newest_dt}），共 {total} 期，不寫入")
         return
 
     INDEX_HTML.write_text(html, encoding="utf-8")
-    print(f"\n✅ 已更新 → 第 {newest} 期，共 {total} 期（{today}）")
-    print("→ 沉寂期數 ab 已重新計算")
+    print(f"\n✅ 已更新 → Draw {newest}（{newest_dt}），共 {total} 期（{today}）")
 
-    # ── Git commit + push ──────────────────────────────────────
+    # ── Git commit + push ─────────────────────────────────────
     repo = INDEX_HTML.parent
-    new_periods = ", ".join(
-        f"{d['p']}期({'，'.join(f'{n:02d}' for n in d['n'])})"
+    new_info = ", ".join(
+        f"Draw{d['p']}({d['dt']})({','.join(f'{n:02d}' for n in d['n'])})"
         for d in actually_new
     )
-    msg = f"新增 {new_periods}"
+    msg = f"F5 新增 {new_info}"
     try:
-        subprocess.run(["git", "add", "index.html"], cwd=repo, check=True)
+        subprocess.run(["git", "add", "fantasy5.html"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "push"], cwd=repo, check=True, capture_output=True)
-        print(f"→ 已推上 GitHub（約1分鐘後手機頁面生效）")
+        print("→ 已推上 GitHub（約1分鐘後生效）")
     except subprocess.CalledProcessError as e:
-        print(f"⚠️  Git 推送失敗，請手動 push（{e}）")
+        print(f"⚠️  Git 推送失敗（{e}）")
 
 
 # ── 主程式 ───────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="自動抓取今彩539最新開獎")
+    parser = argparse.ArgumentParser(description="自動抓取 CA Fantasy 5 最新開獎")
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
     args = parser.parse_args()
 
     html = INDEX_HTML.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
-    latest_date = period_to_date(current_latest)
-    print(f"目前最新：第 {current_latest} 期（{latest_date}）")
+    latest_date = draw_to_date(current_latest)
+    print(f"目前最新：Draw {current_latest}（{latest_date}）")
     print("抓取中...")
 
     draws = fetch_draws(current_latest)
