@@ -551,7 +551,7 @@ function genG3(cand) {
   const byZ = {};
   for(let z=1;z<=4;z++) byZ[z] = [...cand.filter(n=>Z(n)===z)].sort((a,b)=>dualFn(b)-dualFn(a));
   let pool = [...byZ[1].slice(0,2), ...byZ[2].slice(0,2), ...byZ[3].slice(0,2), ...byZ[4].slice(0,2)];
-  if(pool.length < 5) pool = [...pool, ...byZ[4]].filter((n,i,a)=>a.indexOf(n)===i);
+  if(pool.length < 6) pool = [...pool, ...byZ[4]].filter((n,i,a)=>a.indexOf(n)===i);
   pool.sort((a,b)=>dualFn(b)-dualFn(a));
   const nums = ensureConsec(pool.slice(0,6).sort((a,b)=>a-b), cand, dualFn);
   return {nums, dualFn};
@@ -563,12 +563,12 @@ function genG4(cand) {
   const coldThresh = Math.floor(ANNUAL.periods * 6/49 * 0.9);
   let picks = cand.filter(n => ANNUAL.freq[n] <= coldThresh && momFn(n) >= 1.1)
     .sort((a,b) => momFn(b)-momFn(a));
-  if(picks.length < 5) {
+  if(picks.length < 6) {
     const extra = cand.filter(n => momFn(n) >= 1.0 && !picks.includes(n))
       .sort((a,b) => momFn(b)-momFn(a));
     picks = [...picks, ...extra];
   }
-  if(picks.length < 5) picks = [...cand].sort((a,b)=>momFn(b)-momFn(a));
+  if(picks.length < 6) picks = [...cand].sort((a,b)=>momFn(b)-momFn(a));
   return {nums: picks.slice(0,6).sort((a,b)=>a-b), momFn};
 }
 
@@ -1127,13 +1127,13 @@ function renderPick(el){
     const sum=g.nums.reduce((a,b)=>a+b,0);
     const zd={1:0,2:0,3:0,4:0}; g.nums.forEach(n=>{zd[Z(n)]++;});
     return `<div class="grp-meta">
-      <span style="color:#ea580c;font-weight:700">一/二/三區各取最強，四區偏冷(-15碼)最少</span><br>
+      <span style="color:#ea580c;font-weight:700">四區各取前2強（共8碼），雙信號排序取最強6碼</span><br>
       號碼：${g.nums.map(n=>`${f2(n)}(年${ANNUAL.freq[n]},動能×${g.dualFn(n).toFixed(0)}分)`).join(' ')}<br>
       分佈：${[1,2,3,4].map(z=>`${ZL[z]}×${zd[z]}`).join(' ')}，號碼總和：<strong>${sum}</strong>
     </div>
     <div class="verify-row">
-      ${ck(zd[4]<=1,'四區≤1碼')}
-      ${ck(sum>=80&&sum<=120,'總和80-120')}
+      ${ck([1,2,3,4].every(z=>zd[z]>=1),'四區均有覆蓋')}
+      ${ck(sum>=110&&sum<=190,'總和110-190')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
@@ -1549,7 +1549,7 @@ function delRec(i){
 function backtestGroups() {
   const {g1,g2,g3,g4,g5,g6,g8} = allGroups();
   const pred = predictNextDraw();
-  const g7 = pred.length>=5 ? {nums:pred.slice(0,5).map(x=>x.n)} : null;
+  const g7 = pred.length>=6 ? {nums:pred.slice(0,6).map(x=>x.n)} : null;
   const grps = [
     {key:'G1', label:'📅年度熱號', g:g1},
     {key:'G2', label:'⚡近期動能', g:g2},
@@ -1752,7 +1752,7 @@ function renderCompanion(el) {
     }).sort((a,b)=>b.cnt-a.cnt);
 
   const maxCnt = topPairs[0]?.cnt || 1;
-  const randLine = +(total*10/(39*38/2)).toFixed(1);
+  const randLine = +(total*6*5/2/(49*48/2)).toFixed(1);
 
   el.innerHTML = `
   <div class="card">
