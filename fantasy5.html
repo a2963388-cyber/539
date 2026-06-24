@@ -1555,7 +1555,7 @@ function renderTrack(el) {
     if(worstPL && logEntries[0][1]-worstPL[1] >= 0.5 && pickLog.length >= 3)
       sugg.push(`⚠️ <strong>${gNames[worstPL[0]]}</strong> 近期表現偏低（平均 ${worstPL[1]} 碼），建議減少押注此策略。`);
     if(logEntries.every(([,v])=>v < 0.4))
-      sugg.push(`🔍 所有策略命中率均偏低，建議確認遺漏統計表資料為最新（使用「⚙️ 設定」更新），或縮短分析期數。`);
+      sugg.push(`🔍 所有策略命中率均偏低，建議確認號碼統計表資料為最新（使用「⚙️ 設定」更新），或縮短分析期數。`);
   }
   if(!hasPL) {
     if(bestBt && bestBt.avg >= 1.3)
@@ -1658,8 +1658,8 @@ function renderTrack(el) {
 function renderSettings(el){
   el.innerHTML=`
   <div class="card">
-    <h3>⚙️ 更新遺漏統計表</h3>
-    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">每隔約50期從樂透研究院網站複製最新資料貼入，更新平均間隔、最大間隔等長期數據。<br>格式：每行「號碼 最大間隔 平均間隔 最多連續 最近未出現期數 出現總數 20期 50期 100期」</p>
+    <h3>⚙️ 更新號碼統計表</h3>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">每隔約50期手動更新各號碼的長期統計資料（最大間隔、平均間隔等）。<br>格式：每行「號碼 最大間隔 平均間隔 最多連續 最近未出現期數 出現總數 20期 50期 100期」</p>
     <textarea id="st-paste" placeholder="1 44 7.476 4 3 787 1 7 11&#10;2 46 7.766 4 8 757 5 12 19&#10;…"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="btn" onclick="applyStats()">套用更新</button>
