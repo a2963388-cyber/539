@@ -802,7 +802,7 @@ function renderReportHistory(el) {
   <div class="card" style="padding:0">
     <div style="padding:14px 14px 10px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <input id="rpt-q" type="text" placeholder="搜尋期號（如 115149）或號碼（如 08）"
+        <input id="rpt-q" type="text" placeholder="搜尋期號（如 26067）或號碼（如 08）"
           value="${rptHistFilter}"
           oninput="rptHistFilter=this.value; renderReport(document.getElementById('tab-content'))"
           style="flex:1;min-width:160px;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.85rem;outline:none">
@@ -962,7 +962,7 @@ function renderReport(el){
     ${(R.repeatNums&&R.repeatNums.length>0)
       ? `<div class="alert alert-ok" style="margin-bottom:10px">✅ 本期連莊號碼（與上期重複）：${R.repeatNums.map(n=>ball(n,'ball-sm')).join('')}</div>`
       : `<div class="alert alert-blue" style="margin-bottom:10px">本期無連莊號碼</div>`}
-    <div class="sec-lbl">下期連莊預警 — 本期5碼歷史連莊傾向</div>
+    <div class="sec-lbl">下期連莊預警 — 本期6碼歷史連莊傾向</div>
     <table>
       <thead><tr><th>號碼</th><th>歷史出現</th><th>連莊次數</th><th>連莊率</th><th>最常伴隨下一期出現</th></tr></thead>
       <tbody>${R.nums.map(n=>{
@@ -1237,7 +1237,7 @@ function renderAnnual(el){
   </div>
 
   <div class="card">
-    <h3>🔥 號碼年度熱冷排行（全39號）</h3>
+    <h3>🔥 號碼年度熱冷排行（全49號）</h3>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">紅色=超頻熱號 / 藍色=欠頻冷號 / 理論值 ${expF} 次</div>
     ${ranking.map((n,i)=>{
       const f=freq[n], diff=f-expF, pct=+((f/expF-1)*100).toFixed(0);
@@ -1472,7 +1472,7 @@ function renderStats(el){
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem">
         <span>分析期對：<strong>${pairs}</strong> 對</span>
         <span>總連莊事件：<strong>${totalRep}</strong> 次</span>
-        <span>每期平均連莊：<strong>${avgRep}</strong>（理論 0.64）</span>
+        <span>每期平均連莊：<strong>${avgRep}</strong>（理論 0.74）</span>
       </div>
       <div class="sec-lbl">連莊率排行（出現≥3次的號碼）</div>
       <table>
@@ -1734,9 +1734,9 @@ function renderSettings(el){
 function renderCompanion(el) {
   const pairs = buildPairStat();
   const total = rec.length;
-  const randExp = +(total * 2 / (39 * 38 / 2) * C2_ADJ()).toFixed(1);
+  const randExp = +(total * 2 / (49 * 48 / 2) * C2_ADJ()).toFixed(1);
 
-  function C2_ADJ() { return 5*4/2; } // 每期 C(5,2)=10 個 pair
+  function C2_ADJ() { return 6*5/2; } // 每期 C(6,2)=15 個 pair
 
   // 排行榜
   const topPairs = Object.entries(pairs)
