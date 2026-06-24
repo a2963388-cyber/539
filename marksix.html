@@ -632,7 +632,7 @@ function ensureConsec(nums, cand, scoreFn) {
   for(const toOut of byScore) {
     const others = nums.filter(n=>n!==toOut);
     const adj = others.flatMap(n=>[n-1,n+1])
-      .filter(n=>n>=1&&n<=39&&!nums.includes(n)&&cand.includes(n));
+      .filter(n=>n>=1&&n<=49&&!nums.includes(n)&&cand.includes(n));
     if(adj.length) {
       adj.sort((a,b)=>scoreFn(b)-scoreFn(a));
       return [...others, adj[0]].sort((a,b)=>a-b);
@@ -773,7 +773,7 @@ function toggleRptDetail(id) {
 function renderReportHistory(el) {
   const q = rptHistFilter.trim();
   const qNum = parseInt(q);
-  const filterByNum = !isNaN(qNum) && qNum>=1 && qNum<=39;
+  const filterByNum = !isNaN(qNum) && qNum>=1 && qNum<=49;
   const filterByPeriod = q.length>=4 && !filterByNum;
 
   const allPeriods = rec.map((r,i) => {
@@ -889,7 +889,7 @@ function renderReport(el){
 
   // warnings post-update
   const w9=[], w78=[], superODs=[];
-  for(let n=1;n<=39;n++){
+  for(let n=1;n<=49;n++){
     if(!st[n]||R.nums.includes(n)||excl(n)) continue;
     if(st[n].ab===9) w9.push(n);
     else if(st[n].ab===7||st[n].ab===8) w78.push(n);
@@ -1106,7 +1106,7 @@ function renderPick(el){
       區間分佈：${[1,2,3,4].map(z=>`${ZL[z]}×${zd[z]}`).join(' ')}
     </div>
     <div class="verify-row">
-      ${ck(g.nums.every(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*5/39)),'全為高頻號')}
+      ${ck(g.nums.every(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*6/49)),'全為高頻號')}
       ${ck(!g.nums.some(n=>n%10===0||n%10===9),'無冷尾0/9')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
@@ -1141,7 +1141,7 @@ function renderPick(el){
   ${grpCard('🌡️','冷轉熱流（年度冷號+近期反轉動能）',g4,g=>{
     return `<div class="grp-meta">
       <span style="color:#d97706;font-weight:700">捕捉「沉寂已久但最近開始升溫」的反轉信號</span><br>
-      篩選條件：年度頻率≤${Math.floor(ANNUAL.periods*5/39*0.9)}次（低於期望值×90%）且近30期動能≥1.1<br>
+      篩選條件：年度頻率≤${Math.floor(ANNUAL.periods*6/49*0.9)}次（低於期望值×90%）且近30期動能≥1.1<br>
       號碼：${g.nums.map(n=>`${f2(n)}(年${ANNUAL.freq[n]}次,動能×${g.momFn(n).toFixed(2)})`).join(' ')}
     </div>
     <div class="verify-row">
@@ -1176,7 +1176,7 @@ function renderPick(el){
     </div>
     <div class="verify-row">
       ${ck(g.forcedHot,`含年度熱號${String(hn).padStart(2,'0')}`)}
-      ${ck(g.nums.filter(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*5/39)).length>=2,'有高頻號≥2')}
+      ${ck(g.nums.filter(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*6/49)).length>=2,'有高頻號≥2')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
@@ -1190,7 +1190,7 @@ function renderPick(el){
     </div>
     <div class="verify-row">
       ${ck(g.momPicks.every(n=>g.momFn(n)>=1.0),'動能碼均>1.0')}
-      ${ck(g.annPicks.every(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*5/39)),'年度高頻≥期望值')}
+      ${ck(g.annPicks.every(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*6/49)),'年度高頻≥期望值')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
@@ -1210,10 +1210,10 @@ function renderAnnual(el){
   const freq=A.freq;
   const firstP=A.firstP, lastP=A.lastP;
   const maxF=Math.max(...freq.slice(1));
-  const expF=+(T*5/39).toFixed(1);
+  const expF=+(T*6/49).toFixed(1);
 
   // sorted ranking
-  const ranking=Array.from({length:39},(_,i)=>i+1).sort((a,b)=>freq[b]-freq[a]);
+  const ranking=Array.from({length:49},(_,i)=>i+1).sort((a,b)=>freq[b]-freq[a]);
 
   // tail bias sorted
   const tailSorted=Object.entries(A.tailBias).sort((a,b)=>b[1]-a[1]);
@@ -1233,7 +1233,7 @@ function renderAnnual(el){
       <div class="zone-box" style="background:#dcfce7"><div class="val" style="color:#16a34a">${A.avgSum}</div><div class="lbl">平均號碼總和</div></div>
       <div class="zone-box" style="background:#dbeafe"><div class="val" style="color:#2563eb">尾${coldTail[0]}</div><div class="lbl">最冷尾數(${coldTail[1]}%)</div></div>`;})()}
     </div>
-    <div style="font-size:.78rem;color:var(--muted)">理論期望：每號每期出現機率 5/39 = 12.82%，${T}期理論出現次數 ≈ <strong>${expF}</strong> 次</div>
+    <div style="font-size:.78rem;color:var(--muted)">理論期望：每號每期出現機率 6/49 = 12.24%，${T}期理論出現次數 ≈ <strong>${expF}</strong> 次</div>
   </div>
 
   <div class="card">
@@ -1260,11 +1260,11 @@ function renderAnnual(el){
 
   <div class="card">
     <h3>🎯 尾數年度偏移（選號核心規律）</h3>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有3個號碼（10,20,30），理論期望較低（${+(T*5*3/39).toFixed(1)}次 vs 其他尾數${+(T*5*4/39).toFixed(1)}次）</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有4個號碼（10,20,30,40），理論期望較低（${+(T*6*4/49).toFixed(1)}次 vs 其他尾數${+(T*6*5/49).toFixed(1)}次）</div>
     <table>
       <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual','2026實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th><th>選號建議</th></tr></thead>
-      <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
-        const exp=ti===0?+(T*5*3/39).toFixed(1):+(T*5*4/39).toFixed(1);
+      <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
+        const exp=ti===0?+(T*6*4/49).toFixed(1):+(T*6*5/49).toFixed(1);
         const clr=biasClr(bias);
         const bg=biasBg(bias);
         return `<tr style="background:${bg}">
@@ -1283,20 +1283,20 @@ function renderAnnual(el){
     <h3>📐 四區分佈 vs 理論值</h3>
     <div class="zone-grid">
       ${[1,2,3,4].map(z=>{
-        const theory=z===1?+(9/39*100).toFixed(1):+(10/39*100).toFixed(1);
+        const theory=z===4?+(13/49*100).toFixed(1):+(12/49*100).toFixed(1);
         const actual=A.zonePct[z];
         const diff=(actual-theory).toFixed(1);
         const hot=actual>theory+1, cold=actual<theory-1;
         return `<div class="zone-box" style="background:var(--z${z}-bg)">
           <div class="val" style="color:var(--z${z})">${actual}%</div>
           <div class="lbl">
-            ${['','一區01-09','二區10-19','三區20-29','四區30-39'][z]}<br>
+            ${['','一區01-12','二區13-24','三區25-36','四區37-49'][z]}<br>
             <span style="font-size:.68rem;color:${hot?'#dc2626':cold?'#2563eb':'var(--muted)'}">理論${theory}% (${diff>=0?'+':''}${diff}%)</span>
           </div>
         </div>`;
       }).join('')}
     </div>
-    <div style="font-size:.78rem;color:var(--muted);margin-top:8px">${(()=>{const t4=+(A.zonePct[4]-(10/39*100)).toFixed(1);return t4<-1?`四區偏冷（${t4}%），選號時可適量減少`:t4>1?`四區偏熱（+${t4}%），可適量增加`:'四區接近理論值';})()}</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:8px">${(()=>{const t4=+(A.zonePct[4]-(13/49*100)).toFixed(1);return t4<-1?`四區偏冷（${t4}%），選號時可適量減少`:t4>1?`四區偏熱（+${t4}%），可適量增加`:'四區接近理論值';})()}</div>
   </div>
 
   <div class="card">
@@ -1325,13 +1325,13 @@ function renderAnnual(el){
         const hotTails=sortedTails.filter(([,b])=>+b>=8).map(([t])=>`尾${t}`);
         const coldTails=sortedTails.filter(([,b])=>+b<=-8).map(([t])=>`尾${t}`);
         const coldestTail=sortedTails[sortedTails.length-1];
-        const coldNums=Array.from({length:39},(_,i)=>i+1).sort((a,b)=>freq[a]-freq[b]).slice(0,2);
-        const z4diff=+(A.zonePct[4]-(10/39*100)).toFixed(1);
+        const coldNums=Array.from({length:49},(_,i)=>i+1).sort((a,b)=>freq[a]-freq[b]).slice(0,2);
+        const z4diff=+(A.zonePct[4]-(13/49*100)).toFixed(1);
         return [
           `✅ <strong>強烈推薦入選：${String(hotN).padStart(2,'0')}</strong>（年度出現${hotF}次，超理論值+${hotPct}%，全年最強統計熱號）`,
           hotTails.length?`✅ <strong>${hotTails.slice(0,3).join('/')} 偏熱</strong>，選號時可多配置`:'',
           `✅ <strong>連號要放</strong>：${A.consecRate}%的期數含連號，每組加入一對連號有統計支撐`,
-          z4diff<-1?`⚠️ <strong>四區謹慎</strong>（30–39）偏冷 ${z4diff}%，不宜超過2碼`:'',
+          z4diff<-1?`⚠️ <strong>四區謹慎</strong>（37-49）偏冷 ${z4diff}%，不宜超過2碼`:'',
           coldTails.length?`🚫 <strong>迴避${coldTails.slice(0,2).join('、')}</strong>（偏冷 ${coldestTail[1]}%，全年最差表現）`:'',
           `🚫 <strong>迴避${coldNums.map(n=>String(n).padStart(2,'0')).join('/')}</strong>：年度最冷號碼（各只出現${freq[coldNums[0]]}次）`,
         ].filter(Boolean).join('<br>');
@@ -1353,12 +1353,12 @@ function renderStats(el){
   // Long-term tail analysis using t50/t100 accumulated data
   const tail50={}, tail100={};
   for(let t=0;t<=9;t++){tail50[t]=0;tail100[t]=0;}
-  for(let n=1;n<=39;n++){
+  for(let n=1;n<=49;n++){
     if(st[n]){tail50[n%10]+=st[n].t50;tail100[n%10]+=st[n].t100;}
   }
-  // Expected: tail0 has 3 nums, tails 1-9 have 4 nums each
-  const exp50 = t => t===0?+(50*5*3/39).toFixed(1):+(50*5*4/39).toFixed(1);
-  const exp100 = t => t===0?+(100*5*3/39).toFixed(1):+(100*5*4/39).toFixed(1);
+  // Expected: tail0 has 4 nums (10,20,30,40), tails 1-9 have 5 nums each
+  const exp50 = t => t===0?+(50*6*4/49).toFixed(1):+(50*6*5/49).toFixed(1);
+  const exp100 = t => t===0?+(100*6*4/49).toFixed(1):+(100*6*5/49).toFixed(1);
   const tailBias50 = t => +((tail50[t]/exp50(t)-1)*100).toFixed(1);
   const tailsSorted50 = Array.from({length:10},(_,i)=>i).sort((a,b)=>tailBias50(b)-tailBias50(a));
 
@@ -1374,7 +1374,7 @@ function renderStats(el){
   }
 
   // Numbers with any return history, sorted by count desc
-  const numsWithHist = Array.from({length:39},(_,i)=>i+1)
+  const numsWithHist = Array.from({length:49},(_,i)=>i+1)
     .filter(n => retHist[n] && retHist[n].length > 0)
     .sort((a,b) => (retHist[b]?.length||0) - (retHist[a]?.length||0));
 
@@ -1398,7 +1398,7 @@ function renderStats(el){
     <table>
       <thead><tr>${thSort('st-tail','t','尾數')}${thSort('st-tail','act50','50期實際')}<th>50期理論</th>${thSort('st-tail','b50','偏移')}${thSort('st-tail','b100','100期偏移')}<th>號碼</th></tr></thead>
       <tbody>${applySort(Array.from({length:10},(_,i)=>({t:i,act50:tail50[i],b50:tailBias50(i),b100:+((tail100[i]/exp100(i)-1)*100).toFixed(1)})),'st-tail','b50','desc').map(({t,act50,b50,b100})=>{
-        const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===t);
+        const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>n%10===t);
         const color=b50>=20?'#dc2626':b50<=-15?'#2563eb':b50>=10?'#d97706':'var(--text)';
         const bg=b50>=20?'#fee2e2':b50<=-15?'#dbeafe':'';
         return `<tr style="background:${bg}">
@@ -1461,7 +1461,7 @@ function renderStats(el){
   <div class="card">
     <h3>🔗 連莊追蹤統計</h3>
     ${(()=>{
-      const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>conStat[n]&&conStat[n].total>0);
+      const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>conStat[n]&&conStat[n].total>0);
       if(nums.length===0) return '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎後自動累積。</div>';
       const totalRep=nums.reduce((s,n)=>s+conStat[n].repeats,0);
       const totalApp=nums.reduce((s,n)=>s+conStat[n].total,0);
@@ -1566,7 +1566,7 @@ function backtestGroups() {
     const mc = draws.map(r => g.nums.filter(n => r.n.includes(n)).length);
     const total = mc.length;
     const avg = total ? +(mc.reduce((a,b)=>a+b,0)/total).toFixed(2) : 0;
-    const randExp = +(5*5/39).toFixed(2);
+    const randExp = +(6*6/49).toFixed(2);
     const hit1cnt = mc.filter(m=>m>=1).length;
     return {key, label, nums:g.nums, avg, randExp,
       hit3: mc.filter(m=>m>=3).length, hit2: mc.filter(m=>m>=2).length,
@@ -1691,7 +1691,7 @@ function renderTrack(el) {
         </tr>`;
       }).join('')}</tbody>
     </table></div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼 ｜ 理論勝率 ≈ 51%（5×5/39 至少1碼機率）</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每6碼選號平均命中 ≈ 0.73碼 ｜ 理論勝率 ≈ 58%（6×6/49 至少1碼機率）</div>
   </div>
 
   <div class="card">
@@ -1717,7 +1717,7 @@ function renderSettings(el){
     <h3>📊 目前各號碼狀態</h3>
     <table>
       <thead><tr>${thSort('cfg-st','n','號碼')}${thSort('cfg-st','ab','沉寂期')}${thSort('cfg-st','ag','平均間隔')}${thSort('cfg-st','mg','最大間隔')}${thSort('cfg-st','ratio','逾期倍數')}</tr></thead>
-      <tbody>${applySort(Array.from({length:39},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:st[n].ag,mg:st[n].mg,ratio:od(n),ex:excl(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio,ex})=>{
+      <tbody>${applySort(Array.from({length:49},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:st[n].ag,mg:st[n].mg,ratio:od(n),ex:excl(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio,ex})=>{
         return `<tr style="${ex?'background:#fee2e2':''}">
           <td>${ex?ballX(n,'ball-sm'):ball(n,'ball-sm')}</td>
           <td>${ab}</td><td>${ag}</td><td>${mg}</td>
@@ -1744,7 +1744,7 @@ function renderCompanion(el) {
     .sort((x,y)=>y.cnt-x.cnt).slice(0,20);
 
   // 單號查詢
-  const companions = Array.from({length:39},(_,i)=>i+1)
+  const companions = Array.from({length:49},(_,i)=>i+1)
     .filter(n=>n!==compNum)
     .map(n => {
       const k = compNum<n?`${compNum}-${n}`:`${n}-${compNum}`;
@@ -1775,7 +1775,7 @@ function renderCompanion(el) {
   <div class="card">
     <h3>🔍 單號同伴查詢</h3>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">
-      ${Array.from({length:39},(_,i)=>i+1).map(n=>`
+      ${Array.from({length:49},(_,i)=>i+1).map(n=>`
         <span onclick="compNum=${n};renderCompanion(document.getElementById('content'))"
           class="ball ball-sm ${ZC[Z(n)]}"
           style="cursor:pointer;outline:${compNum===n?'2.5px solid #1e293b':'2px solid transparent'};outline-offset:1px">${f2(n)}</span>`).join('')}
@@ -1806,7 +1806,7 @@ function applyStats(){
     const p=line.trim().split(/\s+/).map(Number);
     if(p.length>=9){
       const [num,mg,ag,mc,ab,tt,t20,t50,t100]=p;
-      if(num>=1&&num<=39){ st[num]={mg,ag,mc,ab,tt,t20,t50,t100}; cnt++; }
+      if(num>=1&&num<=49){ st[num]={mg,ag,mc,ab,tt,t20,t50,t100}; cnt++; }
     }
   });
   save();
@@ -1834,7 +1834,7 @@ function resetAll(){
 function addDraw(){
   const pv=parseInt(document.getElementById('inp-period').value);
   const ni=[...document.querySelectorAll('.ni')];
-  const nums=ni.map(i=>parseInt(i.value)).filter(n=>n>=1&&n<=39);
+  const nums=ni.map(i=>parseInt(i.value)).filter(n=>n>=1&&n<=49);
 
   if(!pv||pv<24000){ alert('請輸入有效期號（如 26067）'); return; }
   if(nums.length!==6){ alert('請輸入6個 01–49 的號碼'); return; }
@@ -1867,7 +1867,7 @@ function addDraw(){
   }
 
   // update stats
-  for(let n=1;n<=39;n++){
+  for(let n=1;n<=49;n++){
     if(!st[n]) continue;
     st[n].ab = sorted.includes(n) ? 0 : st[n].ab+1;
   }
