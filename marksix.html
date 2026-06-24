@@ -341,7 +341,7 @@ function buildAnnual(records) {
 
 // ── PICK LOG（由 newm6 自動維護，跨裝置共用）───────────────
 const BASE_PICKLOG = [];
-const BASE_PENDING = {"strategies":{"G1":[7,17,25,27,37,47],"G2":[2,10,20,41,43,47],"G3":[7,17,27,28,37,47],"G4":[4,8,10,41,42,43],"G5":[7,17,27,28,37,47],"G6":[7,17,21,27,37,47],"G7":[7,17,27,28,37,47],"G8":[7,17,27,28,37,47]},"ts":1782303704339};
+const BASE_PENDING = {"strategies":{"G1":[7,17,25,27,37,47],"G2":[2,10,20,41,43,47],"G3":[7,17,27,28,37,47],"G4":[4,8,10,41,42,43],"G5":[7,17,27,28,37,47],"G6":[7,17,21,27,37,47],"G7":[7,17,27,28,37,47],"G8":[7,17,27,28,37,47]},"ts":1782303976316};
 
 // ── STORAGE ────────────────────────────────────────────────
 let rec = [], st = {}, retHist = {}, conStat = {}, ANNUAL = null;
@@ -507,7 +507,7 @@ function annScore(n) {
 // 共用：建立近30期動能數據
 function buildMom() {
   const rN = Math.min(30, rec.length);
-  const rf = new Array(40).fill(0);
+  const rf = new Array(50).fill(0);
   rec.slice(0, rN).forEach(r => r.n.forEach(n => rf[n]++));
   const annPer = ANNUAL.periods;
   const momFn = n => { const e = ANNUAL.freq[n]/annPer; return e<0.001?0:(rf[n]/rN)/e; };
@@ -591,7 +591,7 @@ function genG5(cand) {
 // G8: 雙信號複合流（年度熱度×60% + 近期動能×40%）— 回測：1.66×隨機（已剔除無效逾期信號）
 function genG8(cand) {
   const rN = Math.min(30, rec.length);
-  const recentFreq = new Array(40).fill(0);
+  const recentFreq = new Array(50).fill(0);
   rec.slice(0, rN).forEach(r => r.n.forEach(n => recentFreq[n]++));
   const annPer = ANNUAL.periods;
   const momFn = n => { const e = ANNUAL.freq[n]/annPer; return e<0.001?0:(recentFreq[n]/rN)/e; };
@@ -659,7 +659,7 @@ function predictNextDraw() {
 
   // S4：近期動能（近30期出現率 / 年度平均出現率）
   const rN = Math.min(30, rec.length);
-  const recentFreq = new Array(40).fill(0);
+  const recentFreq = new Array(50).fill(0);
   rec.slice(0, rN).forEach(r => r.n.forEach(n => recentFreq[n]++));
   const annPer = ANNUAL.periods;
   const s4fn = n => { const e = ANNUAL.freq[n]/annPer; return e<0.001?0:(recentFreq[n]/rN)/e; };
