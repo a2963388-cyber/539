@@ -646,6 +646,31 @@ function allGroups() {
   return {cand, g1:genG1(cand), g2:genG2(cand), g3:genG3(cand), g4:genG4(cand), g5:genG5(cand), g6:genG6(cand), g8:genG8(cand)};
 }
 
+function calcExcludeZone() {
+  const POOL=49, EXCL=15;
+  const all=Array.from({length:POOL},(_,i)=>i+1);
+  const f5=new Array(POOL+1).fill(0), f10=new Array(POOL+1).fill(0), f20=new Array(POOL+1).fill(0);
+  rec.slice(0,Math.min(5, rec.length)).forEach(r=>r.n.forEach(n=>f5[n]++));
+  rec.slice(0,Math.min(10,rec.length)).forEach(r=>r.n.forEach(n=>f10[n]++));
+  rec.slice(0,Math.min(20,rec.length)).forEach(r=>r.n.forEach(n=>f20[n]++));
+  const score=n=>f5[n]*3.0+f10[n]*1.5+f20[n]*0.8;
+  const exclude=[...all].sort((a,b)=>score(b)-score(a)).slice(0,EXCL);
+  const BT=Math.min(30,rec.length-21);
+  let outside=0,total=0;
+  for(let i=0;i<BT;i++){
+    const b5=new Array(POOL+1).fill(0),b10=new Array(POOL+1).fill(0),b20=new Array(POOL+1).fill(0);
+    rec.slice(i+1,i+1+Math.min(5, rec.length-i-1)).forEach(r=>r.n.forEach(n=>b5[n]++));
+    rec.slice(i+1,i+1+Math.min(10,rec.length-i-1)).forEach(r=>r.n.forEach(n=>b10[n]++));
+    rec.slice(i+1,i+1+Math.min(20,rec.length-i-1)).forEach(r=>r.n.forEach(n=>b20[n]++));
+    const sc=n=>b5[n]*3.0+b10[n]*1.5+b20[n]*0.8;
+    const ex=[...all].sort((a,b)=>sc(b)-sc(a)).slice(0,EXCL);
+    rec[i].n.forEach(n=>{if(!ex.includes(n))outside++;total++;});
+  }
+  const btAvoid=BT>0?(outside/total*100).toFixed(1):null;
+  const theorAvoid=((POOL-EXCL)/POOL*100).toFixed(1);
+  return{exclude,score,btAvoid,theorAvoid,BT};
+}
+
 // 雙信號合成預測：S3年度熱度(60%) + S4近期動能(40%)
 // 回測驗證：逾期壓力~1.09×（無效）已完全剔除；動能×年度雙信號達1.66×隨機
 function predictNextDraw() {
@@ -1194,6 +1219,23 @@ function renderPick(el){
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
+
+  ${(()=>{
+    const{exclude,score,btAvoid,theorAvoid,BT}=calcExcludeZone();
+    const maxSc=Math.max(...exclude.map(score),0.01);
+    const lift=btAvoid?(+btAvoid-+theorAvoid).toFixed(1):null;
+    return`<div class="card" style="border-left:4px solid #7c3aed">
+      <h3>🚫 不出牌預測區（建議排除 15 號）</h3>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">
+        近期高頻號碼短期休息機率較高。排除此 15 號後，剩餘 <strong>34 號</strong>為主力選號池。
+        ${btAvoid?`<br><span style="color:#7c3aed;font-weight:600">回測(${BT}期)：主力池命中率 ${btAvoid}%（理論 ${theorAvoid}%，${+lift>=0?'提升+':''}${lift}%）</span>`:''}
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        ${exclude.map(n=>{const pct=Math.round(score(n)/maxSc*100);return`<div style="text-align:center"><span class="ball ball-sm" style="background:#7c3aed;color:#fff;opacity:${0.45+pct*0.0055}">${f2(n)}</span><div style="font-size:.58rem;color:#7c3aed;margin-top:1px">${pct}</div></div>`;}).join('')}
+      </div>
+      <div style="font-size:.7rem;color:var(--muted)">數字為近期熱度分（100=最熱），熱度越高→下期不出機率越大</div>
+    </div>`;
+  })()}
 
   <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
     <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
