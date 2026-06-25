@@ -1608,6 +1608,32 @@ function backtestGroups() {
   });
 }
 
+function rollingBacktestG12() {
+  const POOL=39,PICK=5;
+  const all=Array.from({length:POOL},(_,i)=>i+1);
+  const BT=Math.min(50,rec.length-30);
+  if(BT<5) return null;
+  const h1=[],h2=[];
+  for(let i=0;i<BT;i++){
+    const tr=rec.slice(i+1);
+    if(tr.length<20) continue;
+    const actual=rec[i].n;
+    const freq=new Array(POOL+1).fill(0);
+    tr.forEach(r=>r.n.forEach(n=>freq[n]++));
+    const g1=[...all].sort((a,b)=>freq[b]-freq[a]).slice(0,PICK);
+    h1.push(g1.filter(n=>actual.includes(n)).length);
+    const rN=Math.min(30,tr.length),rFreq=new Array(POOL+1).fill(0);
+    tr.slice(0,rN).forEach(r=>r.n.forEach(n=>rFreq[n]++));
+    const totN=tr.length,mom=n=>{const e=freq[n]/totN;return e<0.001?0:(rFreq[n]/rN)/e;};
+    const g2=[...all].sort((a,b)=>mom(b)-mom(a)).slice(0,PICK);
+    h2.push(g2.filter(n=>actual.includes(n)).length);
+  }
+  const randExp=+(PICK*PICK/POOL).toFixed(2);
+  const avg1=h1.length?+(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2):null;
+  const avg2=h2.length?+(h2.reduce((a,b)=>a+b,0)/h2.length).toFixed(2):null;
+  return{G1:{n:h1.length,avg:avg1,excess:avg1!==null?+(avg1-randExp).toFixed(2):null},G2:{n:h2.length,avg:avg2,excess:avg2!==null?+(avg2-randExp).toFixed(2):null},randExp,BT:h1.length};
+}
+
 function renderTrack(el) {
   const bt = backtestGroups();
   const validBt = bt.filter(g=>g.valid);
@@ -1621,6 +1647,14 @@ function renderTrack(el) {
     const rel = pickLog.filter(l => l.hits && l.hits[k] !== undefined);
     if(rel.length) logAvg[k] = +(rel.reduce((a,l)=>a+l.hits[k],0)/rel.length).toFixed(2);
   });
+  const RAND_EXP=+(5*5/39).toFixed(2);
+  const perfRows=gKeys.map(k=>{
+    const rel=pickLog.filter(l=>l.hits&&l.hits[k]!==undefined);
+    const n=rel.length,tot=n>0?rel.reduce((a,l)=>a+l.hits[k],0):0;
+    const avg=n>0?+(tot/n).toFixed(2):null,excess=avg!==null?+(avg-RAND_EXP).toFixed(2):null;
+    return{k,n,tot,avg,excess};
+  }).sort((a,b)=>(b.excess??-99)-(a.excess??-99));
+  const rb=rollingBacktestG12();
 
   // suggestions
   const sugg = [];
@@ -1691,6 +1725,36 @@ function renderTrack(el) {
     <button onclick="if(confirm('確認清空全部押注紀錄？'))pickLog=[];savePickLog();render();" class="btn btn-red" style="margin-top:10px;font-size:.75rem;padding:5px 12px">清空紀錄</button>`;
 
   el.innerHTML = `
+  <div class="card" style="border-top:4px solid #dc2626">
+    <h3>📊 策略真實績效排行（實際押注 · out-of-sample）</h3>
+    ${pickLog.length<3
+      ?`<div class="alert alert-blue" style="font-size:.82rem">⚠️ 押注紀錄不足（目前 ${pickLog.length} 筆）。在「🎯 選號」頁鎖定預測並輸入開獎號碼後此表自動更新，需至少 3 筆。</div>`
+      :`<div style="overflow-x:auto"><table>
+        <thead><tr><th>策略</th><th>押注期數</th><th>總命中</th><th>平均/期</th><th>隨機期望</th><th>超額</th><th>建議</th></tr></thead>
+        <tbody>${perfRows.map(r=>{
+          if(r.n===0) return `<tr><td style="font-size:.76rem">${gNames[r.k]}</td><td colspan="6" style="color:var(--muted);font-size:.75rem;text-align:center">無紀錄</td></tr>`;
+          const exClr=r.excess>0.1?'#16a34a':r.excess>-0.1?'#d97706':'#dc2626';
+          const badge=r.n<5?'⚠️ 樣本少':r.excess>0.1?'✅ 繼續押':r.excess>-0.1?'⚠️ 觀察':'❌ 考慮剔除';
+          return `<tr>
+            <td style="font-size:.78rem;font-weight:600">${gNames[r.k]}</td>
+            <td style="text-align:center">${r.n}</td>
+            <td style="text-align:center">${r.tot}</td>
+            <td style="text-align:center;font-weight:700;color:${exClr}">${r.avg}</td>
+            <td style="text-align:center;color:var(--muted)">${RAND_EXP}</td>
+            <td style="text-align:center;font-weight:700;color:${exClr}">${r.excess>=0?'+':''}${r.excess}</td>
+            <td style="font-size:.75rem">${badge}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">超額 = 平均命中 − 隨機期望（${RAND_EXP}）｜正值=優於隨機，負值=劣於隨機｜建議累積 10 期以上再決策</div>`}
+    ${rb?`<div style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:.75rem">
+      🔬 <strong>G1/G2 滾動回測（${rb.BT} 期，無資料洩漏）</strong>：
+      G1 年度熱號 ${rb.G1.avg} 碼/期（超額 ${rb.G1.excess>=0?'+':''}${rb.G1.excess}）｜
+      G2 近期動能 ${rb.G2.avg} 碼/期（超額 ${rb.G2.excess>=0?'+':''}${rb.G2.excess}）｜
+      隨機基準 ${rb.randExp}
+    </div>`:''}
+  </div>
+
   <div class="card">
     <h3>🔒 本期預測狀態</h3>
     ${pendHTML}
@@ -1707,15 +1771,18 @@ function renderTrack(el) {
       ⓘ 說明：以「當前狀態」生成的選號與全部 ${N} 期歷史開獎比對。數字越多代表策略在歷史上命中率越高。G4因選超期號天生偏低，請以實際押注紀錄為準。
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>策略</th><th>本期選號</th>${thSort('trk-bt','avg','平均命中')}${thSort('trk-bt','winRate','勝率%')}${thSort('trk-bt','hit2','2碼+')}${thSort('trk-bt','hit3','3碼+')}${thSort('trk-bt','maxM','最高')}<th>評估</th></tr></thead>
+      <thead><tr><th>策略</th><th>本期選號</th>${thSort('trk-bt','avg','平均命中')}<th>超額</th>${thSort('trk-bt','winRate','勝率%')}${thSort('trk-bt','hit2','2碼+')}${thSort('trk-bt','hit3','3碼+')}${thSort('trk-bt','maxM','最高')}<th>評估</th></tr></thead>
       <tbody>${applySort(bt,'trk-bt','avg','desc').map(g => {
-        if(!g.valid) return `<tr><td colspan="9" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
+        if(!g.valid) return `<tr><td colspan="10" style="color:var(--muted);font-size:.78rem">${g.label} — 候選號碼不足</td></tr>`;
         const grade = g.avg>=1.5?'優秀':g.avg>=1.0?'良好':g.avg>=0.6?'普通':'偏低';
         const clr = g.avg>=1.5?'#dc2626':g.avg>=1.0?'#d97706':g.avg>=0.6?'var(--muted)':'#2563eb';
+        const ex=+(g.avg-g.randExp).toFixed(2);
+        const exClr=ex>0.05?'#16a34a':ex>-0.05?'#d97706':'#dc2626';
         return `<tr>
           <td style="font-size:.78rem;font-weight:600">${g.label}</td>
           <td style="font-size:.68rem;color:var(--muted)">${g.nums.map(f2).join(' ')}</td>
           <td style="text-align:center;font-weight:700;color:${clr}">${g.avg}</td>
+          <td style="text-align:center;font-size:.8rem;font-weight:700;color:${exClr}">${ex>=0?'+':''}${ex}</td>
           <td style="text-align:center;font-size:.8rem;font-weight:600;color:${g.winRate>=60?'#16a34a':g.winRate>=45?'#d97706':'#94a3b8'}">${g.winRate}%</td>
           <td style="text-align:center;font-size:.8rem">${g.hit2}/${g.total}</td>
           <td style="text-align:center;font-size:.8rem">${g.hit3}/${g.total}</td>
@@ -1724,7 +1791,8 @@ function renderTrack(el) {
         </tr>`;
       }).join('')}</tbody>
     </table></div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼 ｜ 理論勝率 ≈ 51%（5×5/39 至少1碼機率）</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼 ｜ 超額 = 平均 − 0.64</div>
+    <div style="font-size:.7rem;color:#d97706;margin-top:4px">⚠️ 此回測以「當前模型」對全部歷史資料比對，存在資料洩漏，數字偏樂觀。請以上方「真實績效排行」為主要參考依據。</div>
   </div>
 
   <div class="card">
