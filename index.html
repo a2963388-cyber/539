@@ -591,28 +591,57 @@ function allGroups() {
 }
 
 function calcExcludeZone() {
-  const POOL=39, EXCL=15;
+  const POOL=39,PICK=5,EXCL=15;
   const all=Array.from({length:POOL},(_,i)=>i+1);
-  const f5=new Array(POOL+1).fill(0), f10=new Array(POOL+1).fill(0), f20=new Array(POOL+1).fill(0);
-  rec.slice(0,Math.min(5, rec.length)).forEach(r=>r.n.forEach(n=>f5[n]++));
+  const ZLbl={1:'一區 1–9',2:'二區 10–19',3:'三區 20–29',4:'四區 30–39'};
+  if(rec.length<5) return{exclude:all.slice(0,EXCL),score:()=>50,S1:()=>50,S2:()=>50,S3:()=>50,btAvoid:null,theorAvoid:((POOL-EXCL)/POOL*100).toFixed(1),BT:0,zHeat:{1:1,2:1,3:1,4:1},hotZone:1,ZLbl,markovTop:[],lastNums:[]};
+  // S1: 近期高頻
+  const f5=new Array(POOL+1).fill(0),f10=new Array(POOL+1).fill(0),f20=new Array(POOL+1).fill(0);
+  rec.slice(0,Math.min(5,rec.length)).forEach(r=>r.n.forEach(n=>f5[n]++));
   rec.slice(0,Math.min(10,rec.length)).forEach(r=>r.n.forEach(n=>f10[n]++));
   rec.slice(0,Math.min(20,rec.length)).forEach(r=>r.n.forEach(n=>f20[n]++));
-  const score=n=>f5[n]*3.0+f10[n]*1.5+f20[n]*0.8;
-  const exclude=[...all].sort((a,b)=>score(b)-score(a)).slice(0,EXCL);
-  const BT=Math.min(30,rec.length-21);
-  let outside=0,total=0;
+  const fr=n=>f5[n]*3.0+f10[n]*1.5+f20[n]*0.8;
+  const frMax=Math.max(...all.map(fr),0.01);
+  const S1=n=>fr(n)/frMax*100;
+  // S2: 區間輪動
+  const zoneSz={1:0,2:0,3:0,4:0};all.forEach(n=>zoneSz[Z(n)]++);
+  const rNz=Math.min(10,rec.length);const zCnt={1:0,2:0,3:0,4:0};
+  rec.slice(0,rNz).forEach(r=>r.n.forEach(n=>zCnt[Z(n)]++));
+  const zHeat={};[1,2,3,4].forEach(z=>{const e=rNz*PICK*zoneSz[z]/POOL;zHeat[z]=e>0?+(zCnt[z]/e).toFixed(2):1;});
+  const zHMax=Math.max(...Object.values(zHeat),0.01);
+  const S2=n=>zHeat[Z(n)]/zHMax*100;
+  // S3: 馬可夫鏈（反向）
+  const lastNums=rec[0]?.n||[];
+  const mfSum=new Array(POOL+1).fill(0);let mfOpp=0;
+  lastNums.forEach(prev=>{if(conStat[prev]&&conStat[prev].total>0){const t=conStat[prev].total;all.forEach(m=>{mfSum[m]+=(conStat[prev].followedBy[m]||0)/t;});mfOpp++;}});
+  const mfRaw=n=>mfOpp>0?mfSum[n]/mfOpp:0;
+  const mfMax=Math.max(...all.map(mfRaw),0.001);
+  const S3=n=>(1-mfRaw(n)/mfMax)*100;
+  // 加權合成 40%/30%/30%
+  const combined=n=>S1(n)*0.4+S2(n)*0.3+S3(n)*0.3;
+  const cMax=Math.max(...all.map(combined),0.01);
+  const exclude=[...all].sort((a,b)=>combined(b)-combined(a)).slice(0,EXCL);
+  // 回測（近頻+區間，馬可夫略）
+  const BT=Math.min(30,rec.length-21);let outside=0,total=0;
   for(let i=0;i<BT;i++){
     const b5=new Array(POOL+1).fill(0),b10=new Array(POOL+1).fill(0),b20=new Array(POOL+1).fill(0);
-    rec.slice(i+1,i+1+Math.min(5, rec.length-i-1)).forEach(r=>r.n.forEach(n=>b5[n]++));
+    rec.slice(i+1,i+1+Math.min(5,rec.length-i-1)).forEach(r=>r.n.forEach(n=>b5[n]++));
     rec.slice(i+1,i+1+Math.min(10,rec.length-i-1)).forEach(r=>r.n.forEach(n=>b10[n]++));
     rec.slice(i+1,i+1+Math.min(20,rec.length-i-1)).forEach(r=>r.n.forEach(n=>b20[n]++));
-    const sc=n=>b5[n]*3.0+b10[n]*1.5+b20[n]*0.8;
-    const ex=[...all].sort((a,b)=>sc(b)-sc(a)).slice(0,EXCL);
+    const rNzb=Math.min(10,rec.length-i-1);const bzCnt={1:0,2:0,3:0,4:0};
+    rec.slice(i+1,i+1+rNzb).forEach(r=>r.n.forEach(n=>bzCnt[Z(n)]++));
+    const bzH={};[1,2,3,4].forEach(z=>{const e=rNzb*PICK*zoneSz[z]/POOL;bzH[z]=e>0?bzCnt[z]/e:1;});
+    const bzMax=Math.max(...Object.values(bzH),0.01);
+    const sf=n=>b5[n]*3.0+b10[n]*1.5+b20[n]*0.8;const sfMax=Math.max(...all.map(sf),0.01);
+    const bsc=n=>sf(n)/sfMax*100*0.55+bzH[Z(n)]/bzMax*100*0.45;
+    const ex=[...all].sort((a,b)=>bsc(b)-bsc(a)).slice(0,EXCL);
     rec[i].n.forEach(n=>{if(!ex.includes(n))outside++;total++;});
   }
   const btAvoid=BT>0?(outside/total*100).toFixed(1):null;
   const theorAvoid=((POOL-EXCL)/POOL*100).toFixed(1);
-  return{exclude,score,btAvoid,theorAvoid,BT};
+  const hotZone=+Object.entries(zHeat).sort((a,b)=>b[1]-a[1])[0][0];
+  const markovTop=mfOpp>0?[...all].sort((a,b)=>mfRaw(b)-mfRaw(a)).slice(0,5):[];
+  return{exclude,score:n=>Math.round(combined(n)/cMax*100),S1,S2,S3,btAvoid,theorAvoid,BT,zHeat,hotZone,ZLbl,markovTop,lastNums};
 }
 
 // 雙信號合成預測：S3年度熱度(60%) + S4近期動能(40%)
@@ -1165,19 +1194,27 @@ function renderPick(el){
   })}
 
   ${(()=>{
-    const{exclude,score,btAvoid,theorAvoid,BT}=calcExcludeZone();
-    const maxSc=Math.max(...exclude.map(score),0.01);
+    const{exclude,score,S1,S2,S3,btAvoid,theorAvoid,BT,zHeat,hotZone,ZLbl,markovTop,lastNums}=calcExcludeZone();
     const lift=btAvoid?(+btAvoid-+theorAvoid).toFixed(1):null;
     return`<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>🚫 不出牌預測區（建議排除 15 號）</h3>
-      <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">
-        近期高頻號碼短期休息機率較高。排除此 15 號後，剩餘 <strong>24 號</strong>為主力選號池。
-        ${btAvoid?`<br><span style="color:#7c3aed;font-weight:600">回測(${BT}期)：主力池命中率 ${btAvoid}%（理論 ${theorAvoid}%，${+lift>=0?'提升+':''}${lift}%）</span>`:''}
+      <h3>🚫 不出牌預測區（建議排除 15 號｜剩餘 24 號為主力池）</h3>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-size:.72rem">
+        <span style="background:#f3e8ff;color:#7c3aed;padding:2px 7px;border-radius:5px;font-weight:600">近頻 40%</span>
+        <span style="background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:5px;font-weight:600">區間輪動 30%</span>
+        <span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:5px;font-weight:600">馬可夫鏈 30%</span>
       </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-        ${exclude.map(n=>{const pct=Math.round(score(n)/maxSc*100);return`<div style="text-align:center"><span class="ball ball-sm" style="background:#7c3aed;color:#fff;opacity:${0.45+pct*0.0055}">${f2(n)}</span><div style="font-size:.58rem;color:#7c3aed;margin-top:1px">${pct}</div></div>`;}).join('')}
+      <div style="font-size:.73rem;padding:5px 8px;background:#f0f9ff;border-radius:6px;margin-bottom:6px">
+        📊 區間輪動：<strong>${ZLbl[hotZone]}</strong> 過熱（理論值 ${(zHeat[hotZone]*100).toFixed(0)}%）→ 此區號碼排除加權
+        <span style="color:var(--muted);margin-left:6px">${[1,2,3,4].map(z=>`Z${z}:${zHeat[z].toFixed(2)}×`).join(' ')}</span>
       </div>
-      <div style="font-size:.7rem;color:var(--muted)">數字為近期熱度分（100=最熱），熱度越高→下期不出機率越大</div>
+      ${lastNums.length?`<div style="font-size:.73rem;padding:5px 8px;background:#fffbeb;border-radius:6px;margin-bottom:8px">
+        🔗 馬可夫：上期 ${lastNums.map(n=>`<b>${f2(n)}</b>`).join(' ')} → 次期常跟出：${markovTop.map(n=>`<b style="color:#d97706">${f2(n)}</b>`).join(' ')}（此5號排除權重已降低）
+      </div>`:''}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+        ${exclude.map(n=>{const s=score(n),s1=Math.round(S1(n)),s2=Math.round(S2(n)),s3=Math.round(S3(n));return`<div style="text-align:center"><span class="ball ball-sm" style="background:#7c3aed;color:#fff;opacity:${0.45+s*0.0055}">${f2(n)}</span><div style="font-size:.58rem;color:#7c3aed;margin-top:1px;font-weight:700">${s}</div><div style="font-size:.5rem;color:#94a3b8;line-height:1.3">${s1}·${s2}·${s3}</div></div>`;}).join('')}
+      </div>
+      <div style="font-size:.68rem;color:var(--muted);margin-bottom:4px">綜合分（近頻·區間·馬可夫），越高→下期不出機率越大</div>
+      ${btAvoid?`<div style="font-size:.72rem;color:#7c3aed;font-weight:600">回測(${BT}期，近頻+區間)：主力池命中率 ${btAvoid}%（理論 ${theorAvoid}%，${+lift>=0?'提升+':''}${lift}%）</div>`:''}
     </div>`;
   })()}
 
