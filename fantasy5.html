@@ -1224,7 +1224,7 @@ function renderPick(el){
         ${exclude.map(n=>{const s=score(n),s1=Math.round(S1(n)),s2=Math.round(S2(n)),s3=Math.round(S3(n));return`<div style="text-align:center"><span class="ball ball-sm" style="background:#7c3aed;color:#fff;opacity:${0.45+s*0.0055}">${f2(n)}</span><div style="font-size:.58rem;color:#7c3aed;margin-top:1px;font-weight:700">${s}</div><div style="font-size:.5rem;color:#94a3b8;line-height:1.3">${s1}·${s2}·${s3}</div></div>`;}).join('')}
       </div>
       <div style="font-size:.68rem;color:var(--muted);margin-bottom:4px">綜合分（近頻·區間·馬可夫），越高→下期不出機率越大</div>
-      ${btAvoid?`<div style="font-size:.72rem;color:#7c3aed;font-weight:600">回測(${BT}期，近頻+區間)：主力池命中率 ${btAvoid}%（理論 ${theorAvoid}%，${+lift>=0?'提升+':''}${lift}%）</div>`:''}
+      ${btAvoid?`<div style="font-size:.72rem;color:#7c3aed;font-weight:600">回測(${BT}期，近頻+區間)：主力池命中率 ${btAvoid}%（理論 ${theorAvoid}%，${+lift>=0?'提升+':''}${lift}%）</div><div style="font-size:.68rem;color:#d97706;margin-top:2px">⚠️ 此回測以當前模型對全部歷史比對，存在資料洩漏，數字偏樂觀</div>`:''}
     </div>`;
   })()}
 
