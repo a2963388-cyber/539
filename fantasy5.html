@@ -1608,6 +1608,26 @@ function backtestGroups() {
   });
 }
 
+function pNorm(z){
+  const t=1/(1+0.2316419*Math.abs(z));
+  const p=1-(1/Math.sqrt(2*Math.PI))*Math.exp(-z*z/2)*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  return z>=0?p:1-p;
+}
+function statsFromVals(vals,mu0){
+  const n=vals.length;
+  if(n<3) return null;
+  const mean=vals.reduce((a,b)=>a+b,0)/n;
+  const variance=n>1?vals.reduce((a,b)=>a+(b-mean)**2,0)/(n-1):0;
+  const std=Math.sqrt(variance);
+  const se=std/Math.sqrt(n);
+  const tCrit=n>=30?1.96:n>=20?2.09:n>=15?2.14:n>=10?2.23:n>=5?2.57:3.18;
+  const ci=[+(mean-tCrit*se).toFixed(2),+(mean+tCrit*se).toFixed(2)];
+  const tStat=std<0.001?0:(mean-mu0)/se;
+  const pval=+(2*(1-pNorm(Math.abs(tStat)))).toFixed(3);
+  const nNeeded=std>0&&Math.abs(mean-mu0)>0.01?Math.min(500,Math.ceil(Math.pow(2.80*std/Math.abs(mean-mu0),2))):null;
+  return{mean:+mean.toFixed(2),std:+std.toFixed(2),ci,pval,nNeeded};
+}
+
 function rollingBacktestG12() {
   const POOL=39,PICK=5;
   const all=Array.from({length:POOL},(_,i)=>i+1);
@@ -1650,9 +1670,11 @@ function renderTrack(el) {
   const RAND_EXP=+(5*5/39).toFixed(2);
   const perfRows=gKeys.map(k=>{
     const rel=pickLog.filter(l=>l.hits&&l.hits[k]!==undefined);
-    const n=rel.length,tot=n>0?rel.reduce((a,l)=>a+l.hits[k],0):0;
+    const n=rel.length,vals=rel.map(l=>l.hits[k]);
+    const tot=vals.reduce((a,b)=>a+b,0);
     const avg=n>0?+(tot/n).toFixed(2):null,excess=avg!==null?+(avg-RAND_EXP).toFixed(2):null;
-    return{k,n,tot,avg,excess};
+    const stat=n>=3?statsFromVals(vals,RAND_EXP):null;
+    return{k,n,tot,avg,excess,ci:stat?.ci??null,pval:stat?.pval??null,nNeeded:stat?.nNeeded??null};
   }).sort((a,b)=>(b.excess??-99)-(a.excess??-99));
   const rb=rollingBacktestG12();
 
@@ -1730,23 +1752,29 @@ function renderTrack(el) {
     ${pickLog.length<3
       ?`<div class="alert alert-blue" style="font-size:.82rem">⚠️ 押注紀錄不足（目前 ${pickLog.length} 筆）。在「🎯 選號」頁鎖定預測並輸入開獎號碼後此表自動更新，需至少 3 筆。</div>`
       :`<div style="overflow-x:auto"><table>
-        <thead><tr><th>策略</th><th>押注期數</th><th>總命中</th><th>平均/期</th><th>隨機期望</th><th>超額</th><th>建議</th></tr></thead>
+        <thead><tr><th>策略</th><th>N</th><th>平均/期</th><th>95%信賴區間</th><th>超額</th><th>p值</th><th>判定</th></tr></thead>
         <tbody>${perfRows.map(r=>{
           if(r.n===0) return `<tr><td style="font-size:.76rem">${gNames[r.k]}</td><td colspan="6" style="color:var(--muted);font-size:.75rem;text-align:center">無紀錄</td></tr>`;
           const exClr=r.excess>0.1?'#16a34a':r.excess>-0.1?'#d97706':'#dc2626';
-          const badge=r.n<5?'⚠️ 樣本少':r.excess>0.1?'✅ 繼續押':r.excess>-0.1?'⚠️ 觀察':'❌ 考慮剔除';
+          const pClr=r.pval===null?'#94a3b8':r.pval<0.05?'#16a34a':r.pval<0.10?'#d97706':'#94a3b8';
+          const badge=r.n<3?'⚠️ 樣本少':r.pval===null?'⚠️ 樣本少':r.pval<0.05&&r.excess>0?'✅ 顯著優於隨機':r.pval<0.05&&r.excess<=0?'❌ 顯著劣於隨機':r.pval<0.10?'⚠️ 趨勢（未顯著）':'— 尚不顯著';
+          const ciStr=r.ci?`[${r.ci[0]}, ${r.ci[1]}]`:'—';
+          const pStr=r.pval!==null?`p=${r.pval}`:'—';
           return `<tr>
             <td style="font-size:.78rem;font-weight:600">${gNames[r.k]}</td>
             <td style="text-align:center">${r.n}</td>
-            <td style="text-align:center">${r.tot}</td>
             <td style="text-align:center;font-weight:700;color:${exClr}">${r.avg}</td>
-            <td style="text-align:center;color:var(--muted)">${RAND_EXP}</td>
+            <td style="text-align:center;font-size:.74rem;color:var(--muted)">${ciStr}</td>
             <td style="text-align:center;font-weight:700;color:${exClr}">${r.excess>=0?'+':''}${r.excess}</td>
-            <td style="font-size:.75rem">${badge}</td>
+            <td style="text-align:center;font-weight:700;color:${pClr}">${pStr}</td>
+            <td style="font-size:.74rem">${badge}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">超額 = 平均命中 − 隨機期望（${RAND_EXP}）｜正值=優於隨機，負值=劣於隨機｜建議累積 10 期以上再決策</div>`}
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">
+        超額 = 平均 − 隨機期望（${RAND_EXP}）｜95%CI 含 ${RAND_EXP} → 不顯著｜p&lt;0.05 才算統計顯著
+        ${(()=>{const ns=perfRows.filter(r=>r.nNeeded&&r.excess>0).map(r=>r.nNeeded);return ns.length?`｜最快約 <strong>${Math.min(...ns)}</strong> 期可達顯著`:'';})()}
+      </div>`}
     ${rb?`<div style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:.75rem">
       🔬 <strong>G1/G2 滾動回測（${rb.BT} 期，無資料洩漏）</strong>：
       G1 年度熱號 ${rb.G1.avg} 碼/期（超額 ${rb.G1.excess>=0?'+':''}${rb.G1.excess}）｜
