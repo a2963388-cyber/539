@@ -611,6 +611,11 @@ def main():
     draws = fetch_draws(current_latest)
     if not draws:
         print("✅ 無新資料（今日可能尚未開獎，或已是最新）")
+        gap_days = (date.today() - latest_date).days
+        if gap_days >= 2:
+            msg = f"今彩539更新可能失敗！停在第{current_latest}期（{gap_days}天前），請手動檢查。"
+            subprocess.run(['osascript', '-e', f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'], capture_output=True)
+            print(f"⚠️ 資料已 {gap_days} 天未更新，已發送 macOS 通知")
         return
 
     update_html(draws, dry_run=args.dry)

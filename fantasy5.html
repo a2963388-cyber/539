@@ -413,7 +413,7 @@ function lockPick() {
   if(g4) s.G4=g4.nums; if(g5) s.G5=g5.nums; if(g6) s.G6=g6.nums;
   if(pred.length>=5) s.G7=pred.slice(0,5).map(x=>x.n);
   if(g8) s.G8=g8.nums;
-  pendingPick = {strategies:s, ts:Date.now()};
+  pendingPick = {strategies:s, excluded:excluded(), ts:Date.now()};
   savePickLog();
   alert('✅ 已鎖定本期全部8組選號！\nG7/G8採雙信號（年度+動能），逾期信號已剔除。\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
 }
@@ -1628,30 +1628,63 @@ function statsFromVals(vals,mu0){
   return{mean:+mean.toFixed(2),std:+std.toFixed(2),ci,pval,nNeeded};
 }
 
-function rollingBacktestG12() {
+function rollingBacktestAll() {
   const POOL=39,PICK=5;
+  const Zfn=n=>n<=9?1:n<=19?2:n<=29?3:4;
   const all=Array.from({length:POOL},(_,i)=>i+1);
   const BT=Math.min(50,rec.length-30);
   if(BT<5) return null;
-  const h1=[],h2=[];
+  const H={G1:[],G2:[],G3:[],G4:[],G5:[],G6:[],G7:[],G8:[]};
   for(let i=0;i<BT;i++){
     const tr=rec.slice(i+1);
     if(tr.length<20) continue;
     const actual=rec[i].n;
-    const freq=new Array(POOL+1).fill(0);
-    tr.forEach(r=>r.n.forEach(n=>freq[n]++));
-    const g1=[...all].sort((a,b)=>freq[b]-freq[a]).slice(0,PICK);
-    h1.push(g1.filter(n=>actual.includes(n)).length);
-    const rN=Math.min(30,tr.length),rFreq=new Array(POOL+1).fill(0);
-    tr.slice(0,rN).forEach(r=>r.n.forEach(n=>rFreq[n]++));
-    const totN=tr.length,mom=n=>{const e=freq[n]/totN;return e<0.001?0:(rFreq[n]/rN)/e;};
-    const g2=[...all].sort((a,b)=>mom(b)-mom(a)).slice(0,PICK);
-    h2.push(g2.filter(n=>actual.includes(n)).length);
+    const freq=new Array(POOL+2).fill(0);
+    tr.forEach(r=>r.n.forEach(n=>{if(n>=1&&n<=POOL)freq[n]++;}));
+    const periods=tr.length,annMax=Math.max(...all.map(n=>freq[n]),1);
+    const tExp=PICK/POOL*periods,tFreq=new Array(10).fill(0);
+    tr.forEach(r=>r.n.forEach(n=>tFreq[n%10]++));
+    const tBias=tFreq.map(f=>+(((f/tExp)-1)*100).toFixed(0)),tBMax=Math.max(...tBias.map(Math.abs),1);
+    const rN=Math.min(30,tr.length),rf=new Array(POOL+2).fill(0);
+    tr.slice(0,rN).forEach(r=>r.n.forEach(n=>{if(n<=POOL)rf[n]++;}));
+    const momFn=n=>{const e=freq[n]/periods;return e<0.001?0:(rf[n]/rN)/e;};
+    const annFn=n=>(freq[n]/annMax)*70+Math.max(0,tBias[n%10]||0)/tBMax*30;
+    const s3max=Math.max(...all.map(annFn),0.01),momMax=Math.max(...all.map(momFn),0.01);
+    const dualFn=n=>(annFn(n)/s3max)*60+(momFn(n)/momMax)*40;
+    const gIdx=new Array(POOL+2).fill(tr.length);
+    for(let j=0;j<tr.length;j++){tr[j].n.forEach(n=>{if(n<=POOL&&gIdx[n]===tr.length)gIdx[n]=j;});if(all.every(n=>gIdx[n]<tr.length))break;}
+    const gapFn=n=>gIdx[n];
+    H.G1.push([...all].sort((a,b)=>freq[b]-freq[a]).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    H.G2.push([...all].sort((a,b)=>momFn(b)-momFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const byZ={};for(let z=1;z<=4;z++) byZ[z]=[...all.filter(n=>Zfn(n)===z)].sort((a,b)=>dualFn(b)-dualFn(a));
+    let g3p=[...byZ[1].slice(0,2),...byZ[2].slice(0,2),...byZ[3].slice(0,2)];
+    if(g3p.length<PICK) g3p=[...g3p,...byZ[4]].filter((n,i,a)=>a.indexOf(n)===i);
+    H.G3.push(g3p.sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const cT=Math.floor(periods*PICK/POOL*0.9);
+    let g4p=[...all].filter(n=>freq[n]<=cT&&momFn(n)>=1.1).sort((a,b)=>momFn(b)-momFn(a));
+    if(g4p.length<PICK) g4p=[...g4p,...[...all].filter(n=>momFn(n)>=1.0&&!g4p.includes(n)).sort((a,b)=>momFn(b)-momFn(a))];
+    if(g4p.length<PICK) g4p=[...all].sort((a,b)=>gapFn(b)-gapFn(a));
+    H.G4.push(g4p.slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const hotT=tBias.map((b,t)=>b>=8?t:-1).filter(t=>t>=0);
+    const effH=hotT.length?hotT:[1,5,6,8];
+    const hpAll=[...all.filter(n=>effH.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+    const cpAll=[...all.filter(n=>!effH.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+    const hpk=hpAll.slice(0,Math.min(4,hpAll.length));
+    H.G5.push([...hpk,...cpAll.filter(n=>!hpk.includes(n)).slice(0,PICK-hpk.length)].slice(0,PICK).filter(n=>actual.includes(n)).length);
+    H.G6.push([...all].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const g7fn=n=>(gapFn(n)/(tr.length+1))*40+(annFn(n)/s3max)*35+(momFn(n)/momMax)*25;
+    H.G7.push([...all].sort((a,b)=>g7fn(b)-g7fn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const g8fn=n=>(annFn(n)/s3max)*60+(momFn(n)/momMax)*40;
+    H.G8.push([...all].sort((a,b)=>g8fn(b)-g8fn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
   }
   const randExp=+(PICK*PICK/POOL).toFixed(2);
-  const avg1=h1.length?+(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2):null;
-  const avg2=h2.length?+(h2.reduce((a,b)=>a+b,0)/h2.length).toFixed(2):null;
-  return{G1:{n:h1.length,avg:avg1,excess:avg1!==null?+(avg1-randExp).toFixed(2):null},G2:{n:h2.length,avg:avg2,excess:avg2!==null?+(avg2-randExp).toFixed(2):null},randExp,BT:h1.length};
+  const res={randExp,BT:H.G1.length};
+  for(const k of ['G1','G2','G3','G4','G5','G6','G7','G8']){
+    const h=H[k];if(!h.length){res[k]={avg:null,excess:null};continue;}
+    const avg=+(h.reduce((a,b)=>a+b,0)/h.length).toFixed(2);
+    res[k]={avg,excess:+(avg-randExp).toFixed(2)};
+  }
+  return res;
 }
 
 function renderTrack(el) {
@@ -1676,7 +1709,8 @@ function renderTrack(el) {
     const stat=n>=3?statsFromVals(vals,RAND_EXP):null;
     return{k,n,tot,avg,excess,ci:stat?.ci??null,pval:stat?.pval??null,nNeeded:stat?.nNeeded??null};
   }).sort((a,b)=>(b.excess??-99)-(a.excess??-99));
-  const rb=rollingBacktestG12();
+  const POOL=39,PICK=5;
+  const rb=rollingBacktestAll();
 
   // suggestions
   const sugg = [];
@@ -1775,12 +1809,41 @@ function renderTrack(el) {
         超額 = 平均 − 隨機期望（${RAND_EXP}）｜95%CI 含 ${RAND_EXP} → 不顯著｜p&lt;0.05 才算統計顯著
         ${(()=>{const ns=perfRows.filter(r=>r.nNeeded&&r.excess>0).map(r=>r.nNeeded);return ns.length?`｜最快約 <strong>${Math.min(...ns)}</strong> 期可達顯著`:'';})()}
       </div>`}
-    ${rb?`<div style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:.75rem">
-      🔬 <strong>G1/G2 滾動回測（${rb.BT} 期，無資料洩漏）</strong>：
-      G1 年度熱號 ${rb.G1.avg} 碼/期（超額 ${rb.G1.excess>=0?'+':''}${rb.G1.excess}）｜
-      G2 近期動能 ${rb.G2.avg} 碼/期（超額 ${rb.G2.excess>=0?'+':''}${rb.G2.excess}）｜
-      隨機基準 ${rb.randExp}
+    ${rb?`<div style="margin-top:10px;padding:10px;background:#f0fdf4;border-radius:7px;font-size:.75rem">
+      🔬 <strong>全策略滾動回測（${rb.BT}期 · 無資料洩漏）</strong>　隨機基準 ${rb.randExp} 碼/期
+      <div style="overflow-x:auto;margin-top:6px"><table style="width:100%;font-size:.72rem">
+        <thead><tr><th style="text-align:left">策略</th><th style="text-align:center">平均/期</th><th style="text-align:center">超額</th></tr></thead>
+        <tbody>${['G1','G2','G3','G4','G5','G6','G7','G8'].map(k=>{
+          const r=rb[k];
+          if(!r||r.avg===null) return `<tr><td>${gNames[k]}</td><td colspan="2" style="text-align:center;color:var(--muted)">—</td></tr>`;
+          const c=r.excess>0.05?'#16a34a':r.excess>-0.05?'#d97706':'#dc2626';
+          return `<tr><td>${gNames[k]}</td><td style="text-align:center;font-weight:700;color:${c}">${r.avg}</td><td style="text-align:center;font-weight:700;color:${c}">${r.excess>=0?'+':''}${r.excess}</td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div style="color:#6b7280;margin-top:4px;font-size:.68rem">⚠️ G7 使用簡化版滾動回測（gap+年度+動能複合），與實際 G7 略有差異</div>
     </div>`:''}
+    ${(()=>{
+      const avRows=pickLog.filter(l=>l.excludedHits!=null&&l.excluded);
+      if(!avRows.length) return '';
+      const n=avRows.length,EXCLsz=avRows[0].excluded.length;
+      const randExpEx=+(PICK*EXCLsz/POOL).toFixed(2);
+      const avgEx=+(avRows.reduce((a,l)=>a+l.excludedHits,0)/n).toFixed(2);
+      const eff=+(randExpEx-avgEx).toFixed(2);
+      const effClr=eff>0.1?'#16a34a':eff>-0.1?'#d97706':'#dc2626';
+      const stat=n>=3?statsFromVals(avRows.map(l=>l.excludedHits),randExpEx):null;
+      const pStr=stat?`p=${stat.pval}`:'—';
+      const ciStr=stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—';
+      return `<div style="margin-top:10px;padding:10px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;font-size:.75rem">
+        🎯 <strong>不出牌預測區 out-of-sample（${n}期）</strong>
+        <span style="font-size:.7rem;color:var(--muted)">｜開獎號碼落入排除區個數，越低越好｜隨機基準 ${randExpEx}碼/期（${EXCLsz}/${POOL}×${PICK}）</span><br>
+        <div style="margin-top:5px;display:flex;gap:16px;flex-wrap:wrap">
+          <span>平均落入：<strong style="color:${effClr}">${avgEx}</strong>碼</span>
+          <span>排除成效：<strong style="color:${effClr}">${eff>=0?'+':''}${eff}</strong>（${eff>0.05?'✅ 少':eff<-0.05?'❌ 多':'⚠️ 持平'}隨機）</span>
+          <span>p值：<strong>${pStr}</strong></span>
+          <span>95%CI：<strong style="font-size:.72rem">${ciStr}</strong></span>
+        </div>
+      </div>`;
+    })()}
   </div>
 
   <div class="card">
@@ -2007,7 +2070,8 @@ function addDraw(){
     for(const [k,nums] of Object.entries(pendingPick.strategies)) {
       hits[k] = nums.filter(n => sorted.includes(n)).length;
     }
-    pickLog.unshift({period:pv, strategies:pendingPick.strategies, result:sorted, hits, ts:pendingPick.ts});
+    const excHits=pendingPick.excluded?sorted.filter(n=>pendingPick.excluded.includes(n)).length:null;
+    pickLog.unshift({period:pv, strategies:pendingPick.strategies, result:sorted, hits, excludedHits:excHits, excluded:pendingPick.excluded, ts:pendingPick.ts});
     pendingPick = null;
     savePickLog();
   }

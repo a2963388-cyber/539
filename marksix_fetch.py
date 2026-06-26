@@ -41,6 +41,13 @@ def read_current_latest(html: str) -> int:
     m = re.search(r"const BASE_REC = \[\s*\{p:(\d+)", html)
     return int(m.group(1)) if m else 0
 
+def read_latest_dt(html: str):
+    m = re.search(r'const BASE_REC = \[.*?"dt":"(\d{4}-\d{2}-\d{2})"', html, re.DOTALL)
+    if m:
+        from datetime import datetime
+        return datetime.strptime(m.group(1), '%Y-%m-%d').date()
+    return None
+
 
 def fetch_draws(from_p: int) -> list:
     results = []
@@ -490,6 +497,14 @@ def main():
     draws = fetch_draws(current_latest)
     if not draws:
         print("✅ 無新資料（今日可能尚未開獎，或已是最新）")
+        latest_dt = read_latest_dt(html)
+        if latest_dt:
+            gap_days = (date.today() - latest_dt).days
+            if gap_days >= 4:
+                draw_str = f"{current_latest//1000:02d}/{current_latest%1000:03d}"
+                msg = f"六合彩更新可能失敗！停在{draw_str}（{gap_days}天前），請手動檢查。"
+                subprocess.run(['osascript', '-e', f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'], capture_output=True)
+                print(f"⚠️ 資料已 {gap_days} 天未更新，已發送 macOS 通知")
         return
 
     update_html(draws, dry_run=args.dry)
