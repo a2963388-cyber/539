@@ -477,6 +477,17 @@ function buildDual(cand) {
   return {dualFn, momFn};
 }
 
+function buildGap(cand) {
+  const lastIdx = {};
+  cand.forEach(n => lastIdx[n] = rec.length);
+  for(let i=0;i<rec.length;i++){
+    rec[i].n.forEach(n=>{ if(lastIdx[n]===rec.length) lastIdx[n]=i; });
+    if(cand.every(n=>lastIdx[n]<rec.length)) break;
+  }
+  const gapFn = n => lastIdx[n]??rec.length;
+  return {gapFn};
+}
+
 // 保留舊的 cs/byCS 供 G4 警告標注用（不再影響選號）
 function cs(n) {
   if(!st[n]) return 0; const s=st[n];
@@ -522,7 +533,7 @@ function genG4(cand) {
       .sort((a,b) => momFn(b)-momFn(a));
     picks = [...picks, ...extra];
   }
-  if(picks.length < 5) picks = [...cand].sort((a,b)=>momFn(b)-momFn(a));
+  if(picks.length < 5) { const {gapFn}=buildGap(cand); picks=[...cand].sort((a,b)=>gapFn(b)-gapFn(a)); }
   return {nums: picks.slice(0,5).sort((a,b)=>a-b), momFn};
 }
 
@@ -563,18 +574,11 @@ function genG8(cand) {
   return {nums, momPicks, annPicks, momFn, recentFreq, rN};
 }
 
-// G6: 年度規律流（年度最熱號強制入選 + 年度頻率×60% + 尾數偏移×40%）
+// G6: 遺漏壓力流 — 選候選池中遺漏最久的5碼，信號與頻率/動能正交
 function genG6(cand) {
-  const {momFn} = buildMom();
-  const momMax = Math.max(...cand.map(momFn), 0.01);
-  const must=cand.includes(ANNUAL.hotNum)?[ANNUAL.hotNum]:[];
-  const pool=cand.filter(n=>!must.includes(n));
-  const scored=pool.map(n=>({
-    n,
-    score: annScore(n)*0.6 + (momFn(n)/momMax)*100*0.4
-  })).sort((a,b)=>b.score-a.score);
-  const picks=[...must,...scored.slice(0,5-must.length).map(x=>x.n)];
-  return {nums:picks.sort((a,b)=>a-b), forcedHot:must.length>0, hotAnchor:ANNUAL.hotNum, momFn};
+  const {gapFn} = buildGap(cand);
+  const nums = [...cand].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,5).sort((a,b)=>a-b);
+  return {nums, gapFn};
 }
 
 // 連號後處理：若選號無連號且歷史連號率>50%，嘗試替換最低分號換入鄰號
@@ -1174,17 +1178,13 @@ function renderPick(el){
     </div>`;
   })}
 
-  ${grpCard('🏆',`年度規律流（${String(ANNUAL?.hotNum||'?').padStart(2,'0')}錨定+年度×60%+動能×40%）`,g6,g=>{
-    const hn=g.hotAnchor, hf=ANNUAL.freq[hn], hpct=+((hf/ANNUAL.annMax-1)*100).toFixed(0);
+  ${grpCard('⏳','遺漏壓力流（候選池中遺漏最久的5碼）',g6,g=>{
     return `<div class="grp-meta">
-      <span style="color:#dc2626;font-weight:700">${String(hn).padStart(2,'0')}號${ANNUAL.periods}期出現${hf}次（超理論值+${Math.abs(hpct)}%），年度最熱號</span><br>
-      評分 = 年度頻率×60% + 近30期動能×40%（逾期因子已移除）<br>
-      ${g.forcedHot?`✅ ${String(hn).padStart(2,'0')}號已強制入選`:`⚠️ ${String(hn).padStart(2,'0')}號已被排除（超過最大間隔），改取次高分`}<br>
-      號碼：${g.nums.map(n=>`${f2(n)}(年${ANNUAL.freq[n]}次,動能×${g.momFn(n).toFixed(2)})`).join(' ')}
+      <span style="color:#7c3aed;font-weight:700">以「距上次出現的期數」為排序依據，信號與頻率/動能完全正交</span><br>
+      號碼：${g.nums.map(n=>`${f2(n)}(遺漏${g.gapFn(n)}期)`).join(' ')}
     </div>
     <div class="verify-row">
-      ${ck(g.forcedHot,`含年度熱號${String(hn).padStart(2,'0')}`)}
-      ${ck(g.nums.filter(n=>ANNUAL.freq[n]>=Math.floor(ANNUAL.periods*5/39)).length>=2,'有高頻號≥2')}
+      ${ck(g.nums.length>0&&g.gapFn(g.nums.slice().sort((a,b)=>g.gapFn(b)-g.gapFn(a))[0])>10,'最長遺漏>10期')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
@@ -1589,7 +1589,7 @@ function backtestGroups() {
     {key:'G3', label:'⚖️均衡區間', g:g3},
     {key:'G4', label:'🌡️冷轉熱', g:g4},
     {key:'G5', label:'🎯熱尾優先', g:g5},
-    {key:'G6', label:'🏆熱號錨+動能', g:g6},
+    {key:'G6', label:'⏳遺漏壓力', g:g6},
     {key:'G7', label:'📡雙信號預測', g:g7},
     {key:'G8', label:'🎰年度+動能', g:g8},
   ];
@@ -1641,7 +1641,7 @@ function renderTrack(el) {
 
   // per-group log averages
   const gKeys = ['G1','G2','G3','G4','G5','G6','G7','G8'];
-  const gNames = {G1:'📅年度熱號',G2:'⚡近期動能',G3:'⚖️均衡區間',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'🏆熱號錨+動能',G7:'📡雙信號預測',G8:'🎰年度+動能'};
+  const gNames = {G1:'📅年度熱號',G2:'⚡近期動能',G3:'⚖️均衡區間',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力',G7:'📡雙信號預測',G8:'🎰年度+動能'};
   const logAvg = {};
   gKeys.forEach(k => {
     const rel = pickLog.filter(l => l.hits && l.hits[k] !== undefined);
@@ -1677,7 +1677,7 @@ function renderTrack(el) {
   }
   const g6bt = bt.find(g=>g.key==='G6');
   if(g6bt?.valid && g6bt.avg >= 1.0 && !hasPL)
-    sugg.push(`📈 年度規律流（含08熱號）回測表現穩定，2026年度統計效應仍有效。`);
+    sugg.push(`⏳ 遺漏壓力流回測表現穩定，選取候選池中最久未出現的號碼，信號與其他策略完全正交。`);
 
   // pending pick HTML
   const pendHTML = pendingPick ?
