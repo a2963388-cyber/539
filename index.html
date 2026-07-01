@@ -479,26 +479,21 @@ function buildGap(cand) {
   return {gapFn};
 }
 
-function buildReturnStats(records, maxN) {
-  const result = {};
-  for(let n=1; n<=maxN; n++) {
-    const gaps = [];
-    let lastIdx = -1;
-    for(let i=records.length-1; i>=0; i--) {
-      if(records[i].n.includes(n)) {
-        if(lastIdx >= 0) gaps.push(lastIdx - i);
-        lastIdx = i;
+function buildReturnDist(records) {
+  const dist = {};
+  // records[0]=newest, records[N-1]=oldest; iterate oldest→newest
+  for(let i=records.length-1; i>=0; i--) {
+    for(const n of records[i].n) {
+      for(let j=i-1; j>=0; j--) {
+        if(records[j].n.includes(n)) {
+          const gap = i - j;
+          dist[gap] = (dist[gap] || 0) + 1;
+          break;
+        }
       }
     }
-    if(gaps.length) {
-      const s = [...gaps].sort((a,b)=>a-b);
-      const mid = Math.floor(s.length/2);
-      result[n] = {median: s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2, count: gaps.length};
-    } else {
-      result[n] = {median: null, count: 0};
-    }
   }
-  return result;
+  return dist;
 }
 
 // 保留舊的 cs/byCS 供 G4 警告標注用（不再影響選號）
@@ -1907,33 +1902,33 @@ function renderTrack(el) {
 
   <div class="card">
     <h3>⏱️ 回歸期數排名</h3>
-    <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px">歷史中位回歸期：號碼每次出現之間的典型間隔（期數）。壓力值 = 目前遺漏 − 中位回歸期（正值＝已超出歷史常態）</p>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px">統計所有歷史號碼被開出後，間隔幾期再次出現的次數分佈。次數越多代表該回歸間隔在歷史上最常發生。</p>
     ${(() => {
-      const gapSt = buildReturnStats(rec, POOL);
-      const gapRows = [];
-      for(let n=1; n<=POOL; n++) {
-        const g = gapSt[n]; if(g.median===null) continue;
-        const abVal = st[n]?.ab ?? 0;
-        gapRows.push({n, ab:abVal, median:g.median, count:g.count, pressure:+(abVal-g.median).toFixed(1)});
-      }
-      gapRows.sort((a,b)=>b.pressure-a.pressure);
-      const show = gapRows.slice(0,15);
+      const dist = buildReturnDist(rec);
+      const total = Object.values(dist).reduce((a,b)=>a+b,0);
+      if(!total) return '<div style="color:var(--muted);font-size:.82rem">資料不足</div>';
+      const rows = Object.entries(dist)
+        .map(([gap,cnt])=>({gap:+gap, cnt, pct:+(cnt/total*100).toFixed(1)}))
+        .sort((a,b)=>b.cnt-a.cnt);
+      const maxCnt = rows[0].cnt;
+      let cum = 0;
       return `<div style="overflow-x:auto"><table>
-        <thead><tr><th>號碼</th><th>目前遺漏</th><th>中位回歸</th><th>樣本</th><th>壓力值</th><th>狀態</th></tr></thead>
-        <tbody>${show.map(r=>{
-          const clr=r.pressure>5?'#dc2626':r.pressure>0?'#d97706':'#94a3b8';
-          const badge=r.pressure>5?'🔴高壓':r.pressure>0?'🟡超期':'🟢正常';
+        <thead><tr><th>名次</th><th>回歸期數</th><th>次數</th><th>佔比</th><th>累積%</th><th>分佈</th></tr></thead>
+        <tbody>${rows.slice(0,20).map((r,i)=>{
+          cum += r.pct;
+          const barW = Math.round(r.cnt/maxCnt*80);
+          const clr = i===0?'#dc2626':i<3?'#d97706':i<8?'#16a34a':'#94a3b8';
           return `<tr>
-            <td style="font-weight:700;text-align:center">${f2(r.n)}</td>
-            <td style="text-align:center">${r.ab}</td>
-            <td style="text-align:center">${r.median}</td>
-            <td style="text-align:center;color:var(--muted);font-size:.75rem">${r.count}</td>
-            <td style="text-align:center;font-weight:700;color:${clr}">${r.pressure>=0?'+':''}${r.pressure}</td>
-            <td style="text-align:center">${badge}</td>
+            <td style="text-align:center;color:var(--muted);font-size:.75rem">${i+1}</td>
+            <td style="text-align:center;font-weight:700">第 ${r.gap} 期</td>
+            <td style="text-align:center;font-weight:700;color:${clr}">${r.cnt}</td>
+            <td style="text-align:center">${r.pct}%</td>
+            <td style="text-align:center;color:var(--muted);font-size:.75rem">${cum.toFixed(1)}%</td>
+            <td><div style="background:${clr};height:8px;border-radius:4px;width:${barW}px;min-width:2px"></div></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">顯示壓力值最高的 15 個號碼。與 G6 遺漏壓力流正交：G6 用絕對遺漏數排序，此表以「超出歷史慣例幾期」排序。</div>`;
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">共統計 ${total} 次回歸事件，顯示次數最高的前 20 個間隔。可參考最高排名的間隔，判斷當前遺漏是否到達最佳回歸時機。</div>`;
     })()}
   </div>
 
