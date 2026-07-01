@@ -489,6 +489,28 @@ function buildGap(cand) {
   return {gapFn};
 }
 
+function buildReturnStats(records, maxN) {
+  const result = {};
+  for(let n=1; n<=maxN; n++) {
+    const gaps = [];
+    let lastIdx = -1;
+    for(let i=records.length-1; i>=0; i--) {
+      if(records[i].n.includes(n)) {
+        if(lastIdx >= 0) gaps.push(lastIdx - i);
+        lastIdx = i;
+      }
+    }
+    if(gaps.length) {
+      const s = [...gaps].sort((a,b)=>a-b);
+      const mid = Math.floor(s.length/2);
+      result[n] = {median: s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2, count: gaps.length};
+    } else {
+      result[n] = {median: null, count: 0};
+    }
+  }
+  return result;
+}
+
 // 保留舊的 cs/byCS 供 G4 警告標注用（不再影響選號）
 function cs(n) {
   if(!st[n]) return 0; const s=st[n];
@@ -1767,8 +1789,14 @@ function renderTrack(el) {
           ${gKeys.map(k => {
             const h = l.hits?.[k];
             if(h === undefined) return `<td style="color:var(--muted);text-align:center">—</td>`;
+            const hn = new Set(l.hitNums?.[k] ?? (l.strategies?.[k]?.filter(n=>l.result?.includes(n)) ?? []));
+            const nums = l.strategies?.[k] || [];
             const clr = h>=3?'#dc2626':h>=2?'#d97706':h>=1?'#16a34a':'#94a3b8';
-            return `<td style="text-align:center;font-weight:700;color:${clr}">${h}</td>`;
+            const numStr = nums.map(n => hn.has(n)
+              ? `<b style="color:#16a34a">${f2(n)}</b>`
+              : `<span style="color:#94a3b8;font-size:.7em">${f2(n)}</span>`
+            ).join(' ');
+            return `<td style="font-size:.72rem;white-space:nowrap;padding:3px 4px">${numStr}<div style="text-align:center;color:${clr};font-weight:700;font-size:.73rem">${h}✓</div></td>`;
           }).join('')}
           <td style="text-align:center"><span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">${bestG||'—'} ${maxH}碼</span></td>
         </tr>`;
@@ -1885,6 +1913,38 @@ function renderTrack(el) {
     </table></div>
     <div style="font-size:.72rem;color:var(--muted);margin-top:8px">隨機基準：每5碼選號平均命中 ≈ 0.64碼 ｜ 超額 = 平均 − 0.64</div>
     <div style="font-size:.7rem;color:#d97706;margin-top:4px">⚠️ 此回測以「當前模型」對全部歷史資料比對，存在資料洩漏，數字偏樂觀。請以上方「真實績效排行」為主要參考依據。</div>
+  </div>
+
+  <div class="card">
+    <h3>⏱️ 回歸期數排名</h3>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px">歷史中位回歸期：號碼每次出現之間的典型間隔（期數）。壓力值 = 目前遺漏 − 中位回歸期（正值＝已超出歷史常態）</p>
+    ${(() => {
+      const gapSt = buildReturnStats(rec, POOL);
+      const gapRows = [];
+      for(let n=1; n<=POOL; n++) {
+        const g = gapSt[n]; if(g.median===null) continue;
+        const abVal = st[n]?.ab ?? 0;
+        gapRows.push({n, ab:abVal, median:g.median, count:g.count, pressure:+(abVal-g.median).toFixed(1)});
+      }
+      gapRows.sort((a,b)=>b.pressure-a.pressure);
+      const show = gapRows.slice(0,15);
+      return `<div style="overflow-x:auto"><table>
+        <thead><tr><th>號碼</th><th>目前遺漏</th><th>中位回歸</th><th>樣本</th><th>壓力值</th><th>狀態</th></tr></thead>
+        <tbody>${show.map(r=>{
+          const clr=r.pressure>5?'#dc2626':r.pressure>0?'#d97706':'#94a3b8';
+          const badge=r.pressure>5?'🔴高壓':r.pressure>0?'🟡超期':'🟢正常';
+          return `<tr>
+            <td style="font-weight:700;text-align:center">${f2(r.n)}</td>
+            <td style="text-align:center">${r.ab}</td>
+            <td style="text-align:center">${r.median}</td>
+            <td style="text-align:center;color:var(--muted);font-size:.75rem">${r.count}</td>
+            <td style="text-align:center;font-weight:700;color:${clr}">${r.pressure>=0?'+':''}${r.pressure}</td>
+            <td style="text-align:center">${badge}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">顯示壓力值最高的 15 個號碼。與 G6 遺漏壓力流正交：G6 用絕對遺漏數排序，此表以「超出歷史慣例幾期」排序。</div>`;
+    })()}
   </div>
 
   <div class="card">
@@ -2068,11 +2128,14 @@ function addDraw(){
   // check pending pick against this draw result
   if(pendingPick) {
     const hits = {};
+    const hitNums = {};
     for(const [k,nums] of Object.entries(pendingPick.strategies)) {
-      hits[k] = nums.filter(n => sorted.includes(n)).length;
+      const matched = nums.filter(n => sorted.includes(n));
+      hits[k] = matched.length;
+      hitNums[k] = matched;
     }
     const excHits=pendingPick.excluded?sorted.filter(n=>pendingPick.excluded.includes(n)).length:null;
-    pickLog.unshift({period:pv, strategies:pendingPick.strategies, result:sorted, hits, excludedHits:excHits, excluded:pendingPick.excluded, ts:pendingPick.ts});
+    pickLog.unshift({period:pv, strategies:pendingPick.strategies, result:sorted, hits, hitNums, excludedHits:excHits, excluded:pendingPick.excluded, ts:pendingPick.ts});
     pendingPick = null;
     savePickLog();
   }

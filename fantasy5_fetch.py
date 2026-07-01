@@ -489,13 +489,18 @@ def update_html(new_draws: list, dry_run: bool = False):
         oldest_new = sorted(actually_new, key=lambda x: x['p'])[0]
         logged = {e.get('period') for e in base_picklog}
         if oldest_new['p'] not in logged:
-            hits = {gname: len(set(gnums) & set(oldest_new['n']))
-                    for gname, gnums in base_pending['strategies'].items()}
+            hit_nums = {}
+            hits = {}
+            for gname, gnums in base_pending['strategies'].items():
+                matched = sorted(set(gnums) & set(oldest_new['n']))
+                hit_nums[gname] = matched
+                hits[gname] = len(matched)
             new_log_entries.append({
                 'period':     oldest_new['p'],
                 'strategies': base_pending['strategies'],
                 'result':     sorted(oldest_new['n']),
                 'hits':       hits,
+                'hitNums':    hit_nums,
                 'ts':         base_pending.get('ts', 0),
             })
             hit_str = ', '.join(f"{k}:{v}" for k, v in hits.items())
