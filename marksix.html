@@ -541,7 +541,7 @@ function buildReturnDist(records) {
     for(const n of records[i].n) {
       for(let j=i-1; j>=0; j--) {
         if(records[j].n.includes(n)) {
-          const gap = i - j;
+          const gap = i - j - 1;
           dist[gap] = (dist[gap] || 0) + 1;
           break;
         }
@@ -1974,7 +1974,7 @@ function renderTrack(el) {
           const clr = i===0?'#dc2626':i<3?'#d97706':i<8?'#16a34a':'#94a3b8';
           return `<tr>
             <td style="text-align:center;color:var(--muted);font-size:.75rem">${i+1}</td>
-            <td style="text-align:center;font-weight:700">第 ${r.gap} 期</td>
+            <td style="text-align:center;font-weight:700">間隔 ${r.gap} 期${r.gap===0?' 🔁':''}</td>
             <td style="text-align:center;font-weight:700;color:${clr}">${r.cnt}</td>
             <td style="text-align:center">${r.pct}%</td>
             <td style="text-align:center;color:var(--muted);font-size:.75rem">${cum.toFixed(1)}%</td>
