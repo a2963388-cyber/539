@@ -314,6 +314,28 @@ function buildConStat(records) {
   return s;
 }
 
+function buildRetHistFromRec(records, maxN) {
+  const rh = {};
+  const ordered = [...records].reverse();
+  const firstSeen = new Set();
+  const absence = new Array(maxN+1).fill(0);
+  for (const r of ordered) {
+    for (let n=1; n<=maxN; n++) {
+      if (r.n.includes(n)) {
+        if (firstSeen.has(n)) {
+          if (!rh[n]) rh[n] = [];
+          rh[n].push({period: r.p, gap: absence[n]});
+        }
+        firstSeen.add(n);
+        absence[n] = 0;
+      } else if (firstSeen.has(n)) {
+        absence[n]++;
+      }
+    }
+  }
+  return rh;
+}
+
 function buildPairStat() {
   const pairs = {};
   rec.forEach(r => {
@@ -359,13 +381,14 @@ function load() {
   if (!storedRec || storedRec[0]?.p < BASE_REC[0].p) {
     rec     = JSON.parse(JSON.stringify(BASE_REC));
     st      = JSON.parse(JSON.stringify(BASE_ST));
-    retHist = {};
+    retHist = buildRetHistFromRec(rec, 39);
     conStat = buildConStat(rec);
     save();
   } else {
     rec     = storedRec;
     st      = s ? JSON.parse(s) : JSON.parse(JSON.stringify(BASE_ST));
-    retHist = h ? JSON.parse(h) : {};
+    const parsedH = h ? JSON.parse(h) : null;
+    retHist = (parsedH && Object.keys(parsedH).length > 0) ? parsedH : buildRetHistFromRec(rec, 39);
     conStat = buildConStat(rec);
   }
   ANNUAL = buildAnnual(rec);

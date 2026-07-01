@@ -355,6 +355,28 @@ let compNum = 8;         // 同伴分析選中的號碼
 //   repeats    = times num also appeared in the very next draw (連莊)
 //   followedBy = for each number m, how many times m appeared in the next draw after num
 
+function buildRetHistFromRec(records, maxN) {
+  const rh = {};
+  const ordered = [...records].reverse();
+  const firstSeen = new Set();
+  const absence = new Array(maxN+1).fill(0);
+  for (const r of ordered) {
+    for (let n=1; n<=maxN; n++) {
+      if (r.n.includes(n)) {
+        if (firstSeen.has(n)) {
+          if (!rh[n]) rh[n] = [];
+          rh[n].push({period: r.p, gap: absence[n]});
+        }
+        firstSeen.add(n);
+        absence[n] = 0;
+      } else if (firstSeen.has(n)) {
+        absence[n]++;
+      }
+    }
+  }
+  return rh;
+}
+
 function buildConStat(records) {
   const s = {};
   const ordered = [...records].reverse(); // chronological
@@ -415,13 +437,14 @@ function load() {
   if (!storedRec || storedRec[0]?.p < BASE_REC[0].p) {
     rec     = JSON.parse(JSON.stringify(BASE_REC));
     st      = JSON.parse(JSON.stringify(BASE_ST));
-    retHist = {};
+    retHist = buildRetHistFromRec(rec, 49);
     conStat = buildConStat(rec);
     save();
   } else {
     rec     = storedRec;
     st      = s ? JSON.parse(s) : JSON.parse(JSON.stringify(BASE_ST));
-    retHist = h ? JSON.parse(h) : {};
+    const parsedH = h ? JSON.parse(h) : null;
+    retHist = (parsedH && Object.keys(parsedH).length > 0) ? parsedH : buildRetHistFromRec(rec, 49);
     conStat = buildConStat(rec);
   }
   ANNUAL = buildAnnual(rec);
