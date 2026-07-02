@@ -312,9 +312,10 @@ function lockPick() {
   const s = {};
   if(g2) s.G2=g2.nums; if(g4) s.G4=g4.nums;
   if(g5) s.G5=g5.nums; if(g9) s.G9=g9.nums;
+  const g0=genG0(); if(g0) s.G0=g0;
   pendingPick = {strategies:s, excluded:excluded(), ts:Date.now()};
   savePickLog();
-  alert('✅ 已鎖定本期全部4組選號！\n（G1/G3/G6/G7/G8 已依130期回測移除，新增G9回歸熱區）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
+  alert('✅ 已鎖定本期4組選號＋G0隨機對照！\n（G1/G3/G6/G7/G8 已依130期回測移除，新增G9回歸熱區）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
 }
 
 // ── CORE ANALYSIS ──────────────────────────────────────────
@@ -462,6 +463,18 @@ function genG9() {
   const nums = [...pool].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,5).sort((a,b)=>a-b);
   return {nums, top3, gapFn, dualFn, poolSize:pool.length, dist};
 }
+
+// G0 隨機對照組：Lehmer LCG 以最新期號為種子，與 fetch script (Python lcg_picks) 完全一致
+function lcgPicks(seed, numMax, k){
+  let x = seed % 2147483646 + 1;
+  const picks = new Set();
+  while(picks.size < k){
+    x = (x * 48271) % 2147483647;
+    picks.add(1 + x % numMax);
+  }
+  return [...picks].sort((a,b)=>a-b);
+}
+function genG0(){ return rec[0] ? lcgPicks(rec[0].p, 39, 5) : null; }
 
 function allGroups() {
   const cand=candidates();
@@ -1093,6 +1106,34 @@ function renderPick(el){
     </div>`;
   })()}
 
+  ${(()=>{
+    const grps=[['G2',g2],['G4',g4],['G5',g5],['G9',g9]].filter(([,g])=>g).map(([k,g])=>[k,g.nums]);
+    if(grps.length<2) return '';
+    const cnt={};
+    grps.forEach(([,nums])=>nums.forEach(n=>cnt[n]=(cnt[n]||0)+1));
+    const covered=Object.keys(cnt).length, slots=grps.length*5;
+    let maxOv=0,maxPair='';
+    for(let i=0;i<grps.length;i++)for(let j=i+1;j<grps.length;j++){
+      const s=new Set(grps[i][1]);
+      const ov=grps[j][1].filter(n=>s.has(n)).length;
+      if(ov>maxOv){maxOv=ov;maxPair=`${grps[i][0]}×${grps[j][0]}`;}
+    }
+    const covClr=covered>=14?'#16a34a':covered>=10?'#d97706':'#dc2626';
+    const g0=genG0();
+    return `<div class="card" style="border-left:4px solid #0ea5e9">
+      <h3>🧩 策略覆蓋度（重疊診斷）</h3>
+      <div style="font-size:.8rem;margin-bottom:6px">
+        ${grps.length} 組共 ${slots} 個名額，覆蓋 <strong style="color:${covClr};font-size:1.05em">${covered}</strong>/39 個不同號碼
+        ｜最大重疊：<strong>${maxPair}</strong>（${maxOv}/5 碼相同）
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+        ${Object.entries(cnt).sort((a,b)=>b[1]-a[1]||(+a[0])-(+b[0])).map(([n,c])=>`<div style="text-align:center">${ball(+n,'ball-sm')}<div style="font-size:.6rem;font-weight:700;color:${c>=3?'#dc2626':c>=2?'#d97706':'#94a3b8'}">×${c}</div></div>`).join('')}
+      </div>
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
+      ${g0?`<div style="font-size:.74rem;padding:6px 9px;background:#f8fafc;border-radius:6px">🎲 <strong>G0 隨機對照組</strong>（每期自動鎖定，僅作基準不建議下注）：${g0.map(f2).join(' ')}<span style="color:var(--muted);margin-left:6px">若 G0 長期表現與各策略無異，即為「無預測力」的直接證據</span></div>`:''}
+    </div>`;
+  })()}
+
   <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
     <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上4組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
@@ -1548,8 +1589,8 @@ function renderTrack(el) {
 
   // per-group log averages
   // G1/G3/G6/G7/G8 已停用（2026-07-02 回測移除），保留於清單以顯示歷史紀錄
-  const gKeys = ['G1','G2','G3','G4','G5','G6','G7','G8','G9'];
-  const gNames = {G1:'📅年度熱號(停)',G2:'⚡近期動能',G3:'⚖️均衡區間(停)',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力(停)',G7:'📡雙信號(停)',G8:'🎰年度+動能(停)',G9:'🔁回歸熱區'};
+  const gKeys = ['G1','G2','G3','G4','G5','G6','G7','G8','G9','G0'];
+  const gNames = {G1:'📅年度熱號(停)',G2:'⚡近期動能',G3:'⚖️均衡區間(停)',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力(停)',G7:'📡雙信號(停)',G8:'🎰年度+動能(停)',G9:'🔁回歸熱區',G0:'🎲隨機對照'};
   const logAvg = {};
   gKeys.forEach(k => {
     const rel = pickLog.filter(l => l.hits && l.hits[k] !== undefined);

@@ -304,6 +304,15 @@ def gen_g9(records, annual):
     dual_fn, _ = _build_dual(pool, records, annual)
     return sorted(sorted(pool, key=dual_fn, reverse=True)[:6])
 
+def lcg_picks(seed, num_max, k):
+    """Lehmer LCG 選號，與網頁 JS 版 lcgPicks 完全一致（G0 隨機對照組用）"""
+    x = seed % 2147483646 + 1
+    picks = set()
+    while len(picks) < k:
+        x = (x * 48271) % 2147483647
+        picks.add(1 + x % num_max)
+    return sorted(picks)
+
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual: return {}
@@ -321,7 +330,44 @@ def gen_all_predictions(records, st_mg):
     g8 = gen_g8(cand, records, annual)
     if g8: strategies['G8'] = g8
     strategies['G9'] = gen_g9(records, annual)
+    # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
+    strategies['G0'] = lcg_picks(records[0]['p'], 49, 6)
     return strategies
+
+
+def build_log_entries(new_sorted, base_pending, base_picklog, all_records, st_mg):
+    """結算新開獎（回傳新到舊）。第1期用 BASE_PENDING（事前預測）；
+    其後各期用該期之前的歷史重算預測補結算（out-of-sample，標記 backfill）。"""
+    logged = {e.get('period') for e in base_picklog}
+    entries = []
+    for idx, d in enumerate(new_sorted):
+        if d['p'] in logged:
+            continue
+        if idx == 0 and base_pending and base_pending.get('strategies'):
+            strat, ts, backfill = base_pending['strategies'], base_pending.get('ts', 0), False
+        else:
+            hist = [r for r in all_records if r['p'] < d['p']]
+            if len(hist) < 40:
+                continue
+            strat, ts, backfill = gen_all_predictions(hist, st_mg), int(time.time() * 1000), True
+        if not strat:
+            continue
+        hit_nums = {g: sorted(set(nums) & set(d['n'])) for g, nums in strat.items()}
+        hits = {g: len(m) for g, m in hit_nums.items()}
+        entry = {
+            'period':     d['p'],
+            'strategies': strat,
+            'result':     sorted(d['n']),
+            'hits':       hits,
+            'hitNums':    hit_nums,
+            'ts':         ts,
+        }
+        if backfill:
+            entry['backfill'] = True
+        entries.append(entry)
+        tag = '補結算' if backfill else '命中紀錄'
+        print(f"→ {tag} {d['p']}：" + ', '.join(f"{k}:{v}" for k, v in hits.items()))
+    return list(reversed(entries))
 
 
 # ── 讀取 BASE_ST mg ────────────────────────────────────────────
@@ -432,28 +478,10 @@ def update_html(new_draws: list, dry_run: bool = False):
     newest_draw = all_records[0].get('draw', str(all_records[0]['p']))
     newest_dt   = all_records[0].get('dt', '')
 
-    # ── 命中計算 ───────────────────────────────────────────────
-    new_log_entries = []
-    if base_pending and base_pending.get('strategies'):
-        oldest_new = sorted(actually_new, key=lambda x: x['p'])[0]
-        logged = {e.get('period') for e in base_picklog}
-        if oldest_new['p'] not in logged:
-            hit_nums = {}
-            hits = {}
-            for gname, gnums in base_pending['strategies'].items():
-                matched = sorted(set(gnums) & set(oldest_new['n']))
-                hit_nums[gname] = matched
-                hits[gname] = len(matched)
-            new_log_entries.append({
-                'period':     oldest_new['p'],
-                'strategies': base_pending['strategies'],
-                'result':     sorted(oldest_new['n']),
-                'hits':       hits,
-                'hitNums':    hit_nums,
-                'ts':         base_pending.get('ts', 0),
-            })
-            print(f"→ 命中紀錄 {oldest_new['draw']}：" +
-                  ', '.join(f"{k}:{v}" for k,v in hits.items()))
+    # ── 計算命中（第1期用 BASE_PENDING，其後各期補結算）─────────
+    new_log_entries = build_log_entries(
+        sorted(actually_new, key=lambda x: x['p']),
+        base_pending, base_picklog, all_records, st_mg)
 
     # ── 重建 BASE_REC ──────────────────────────────────────────
     rec_lines = []
