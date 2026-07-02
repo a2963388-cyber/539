@@ -308,16 +308,13 @@ function savePickLog() {
   lsSet('539pl', JSON.stringify(pickLog.filter(e=>!basePeriods.has(e.period))));
 }
 function lockPick() {
-  const {g1,g2,g3,g4,g5,g6,g8} = allGroups();
-  const pred = predictNextDraw();
+  const {g1,g3,g5,g6,g8,g9} = allGroups();
   const s = {};
-  if(g1) s.G1=g1.nums; if(g2) s.G2=g2.nums; if(g3) s.G3=g3.nums;
-  if(g4) s.G4=g4.nums; if(g5) s.G5=g5.nums; if(g6) s.G6=g6.nums;
-  if(pred.length>=5) s.G7=pred.slice(0,5).map(x=>x.n);
-  if(g8) s.G8=g8.nums;
+  if(g1) s.G1=g1.nums; if(g3) s.G3=g3.nums; if(g5) s.G5=g5.nums;
+  if(g6) s.G6=g6.nums; if(g8) s.G8=g8.nums; if(g9) s.G9=g9.nums;
   pendingPick = {strategies:s, excluded:excluded(), ts:Date.now()};
   savePickLog();
-  alert('✅ 已鎖定本期全部8組選號！\nG7/G8採雙信號（年度+動能），逾期信號已剔除。\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
+  alert('✅ 已鎖定本期全部6組選號！\n（G2/G4/G7 已依100期回測移除，新增G9回歸熱區）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
 }
 
 // ── CORE ANALYSIS ──────────────────────────────────────────
@@ -421,14 +418,6 @@ function genG1(cand) {
   return {nums, sorted};
 }
 
-// G2: 近期動能流 — 純近30期升溫比，取前5（回測效力1.46×）
-function genG2(cand) {
-  const {momFn} = buildMom();
-  const sorted = [...cand].sort((a,b) => momFn(b)-momFn(a));
-  const nums = sorted.slice(0,5).sort((a,b)=>a-b);
-  return {nums, momFn, sorted};
-}
-
 // G3: 均衡區間流 — 三區覆蓋（一/二/三區各取最強），含連號後處理
 function genG3(cand) {
   const {dualFn} = buildDual(cand);
@@ -439,21 +428,6 @@ function genG3(cand) {
   pool.sort((a,b)=>dualFn(b)-dualFn(a));
   const nums = ensureConsec(pool.slice(0,5).sort((a,b)=>a-b), cand, dualFn);
   return {nums, dualFn};
-}
-
-// G4: 冷轉熱流 — 年度頻率偏低（≤期望值×90%）但近30期升溫，捕捉反轉信號
-function genG4(cand) {
-  const {momFn} = buildMom();
-  const coldThresh = Math.floor(ANNUAL.periods * 5/39 * 0.9);
-  let picks = cand.filter(n => ANNUAL.freq[n] <= coldThresh && momFn(n) >= 1.1)
-    .sort((a,b) => momFn(b)-momFn(a));
-  if(picks.length < 5) {
-    const extra = cand.filter(n => momFn(n) >= 1.0 && !picks.includes(n))
-      .sort((a,b) => momFn(b)-momFn(a));
-    picks = [...picks, ...extra];
-  }
-  if(picks.length < 5) { const {gapFn}=buildGap(cand); picks=[...cand].sort((a,b)=>gapFn(b)-gapFn(a)); }
-  return {nums: picks.slice(0,5).sort((a,b)=>a-b), momFn};
 }
 
 // G5: 熱尾優先流 — 動態從 ANNUAL.tailBias 找偏熱/偏冷尾，強制從熱尾選3+碼
@@ -500,6 +474,20 @@ function genG6(cand) {
   return {nums, gapFn};
 }
 
+// G9: 回歸熱區流 — 沉寂期數落在歷史回歸排名前3間隔的號碼，雙信號分取前5
+// 2026-07-02 100期滾動回測：0.75碼/期，全策略最佳
+function genG9() {
+  const all = Array.from({length:39},(_,i)=>i+1);
+  const dist = buildReturnDist(rec);
+  const top3 = Object.entries(dist).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([g])=>+g);
+  const {gapFn} = buildGap(all);
+  let pool = all.filter(n=>top3.includes(gapFn(n)));
+  if(!pool.length) pool = all;
+  const {dualFn} = buildDual(pool);
+  const nums = [...pool].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,5).sort((a,b)=>a-b);
+  return {nums, top3, gapFn, dualFn, poolSize:pool.length, dist};
+}
+
 // 連號後處理：若選號無連號且歷史連號率>50%，嘗試替換最低分號換入鄰號
 function ensureConsec(nums, cand, scoreFn) {
   if(ANNUAL.consecRate < 50) return nums;
@@ -520,7 +508,7 @@ function ensureConsec(nums, cand, scoreFn) {
 
 function allGroups() {
   const cand=candidates();
-  return {cand, g1:genG1(cand), g2:genG2(cand), g3:genG3(cand), g4:genG4(cand), g5:genG5(cand), g6:genG6(cand), g8:genG8(cand)};
+  return {cand, g1:genG1(cand), g3:genG3(cand), g5:genG5(cand), g6:genG6(cand), g8:genG8(cand), g9:genG9()};
 }
 
 function calcExcludeZone() {
@@ -575,53 +563,6 @@ function calcExcludeZone() {
   const hotZone=+Object.entries(zHeat).sort((a,b)=>b[1]-a[1])[0][0];
   const markovTop=mfOpp>0?[...all].sort((a,b)=>mfRaw(b)-mfRaw(a)).slice(0,5):[];
   return{exclude,score:n=>Math.round(combined(n)/cMax*100),S1,S2,S3,btAvoid,theorAvoid,BT,zHeat,hotZone,ZLbl,markovTop,lastNums};
-}
-
-// 雙信號合成預測：S3年度熱度(60%) + S4近期動能(40%)
-// 回測驗證：逾期壓力~1.09×（無效）已完全剔除；動能×年度雙信號達1.66×隨機
-function predictNextDraw() {
-  if(!rec[0]) return [];
-  const last = rec[0].n;
-  const allNums = Array.from({length:39},(_,i)=>i+1).filter(n=>!excl(n));
-
-  // S3：年度熱度（頻率×70% + 尾偏×30%，分母動態）
-  const s3fn = n => (ANNUAL.freq[n]/ANNUAL.annMax)*70 + Math.max(0, ANNUAL.tailBias[n%10]||0)/ANNUAL.tailBiasMax*30;
-  const s3max = Math.max(...allNums.map(s3fn), 0.01);
-
-  // S4：近期動能（近30期出現率 / 年度平均出現率）
-  const rN = Math.min(30, rec.length);
-  const recentFreq = new Array(40).fill(0);
-  rec.slice(0, rN).forEach(r => r.n.forEach(n => recentFreq[n]++));
-  const annPer = ANNUAL.periods;
-  const s4fn = n => { const e = ANNUAL.freq[n]/annPer; return e<0.001?0:(recentFreq[n]/rN)/e; };
-  const s4max = Math.max(...allNums.map(s4fn), 0.01);
-
-  // S5：同伴加持（兩輪：先用 S3+S4 取前15，再算同伴分）
-  const prelim = allNums.map(n=>({n, sc: s3fn(n)/s3max*60 + s4fn(n)/s4max*40}))
-    .sort((a,b)=>b.sc-a.sc);
-  const friendPool = prelim.slice(0,15).map(x=>x.n);
-  const pairs = buildPairStat();
-  const pairFn = n => {
-    let s=0; friendPool.forEach(m=>{ if(m===n) return;
-      const k=[n,m].sort((a,b)=>a-b).join('-'); s+=(pairs[k]||0); }); return s;
-  };
-  const pairMax = Math.max(...allNums.map(pairFn), 1);
-
-  return allNums.map(n => {
-    const n3 = s3fn(n)/s3max, n4 = s4fn(n)/s4max;
-    const n5 = pairFn(n)/pairMax;
-    const combined = +(n3*55 + n4*35 + n5*10).toFixed(1);
-    const s3p=+(n3*100).toFixed(0), s4p=+(n4*100).toFixed(0);
-    const momRatio = +(s4fn(n)).toFixed(2);
-    return {
-      n, combined, s3p, s4p, momRatio,
-      sigCount: (s3p>=65?1:0)+(s4p>=65?1:0),
-      isLast: last.includes(n),
-      isOD: od(n)>=1.0,
-      isSuperOD: od(n)>=2.0,
-      isAlert9: st[n]?.ab===9,
-    };
-  }).sort((a,b)=>b.combined-a.combined);
 }
 
 // ── UI HELPERS ─────────────────────────────────────────────
@@ -1076,7 +1017,7 @@ function observation(R,w9,sOD){
 
 // ── RENDER: PICK ───────────────────────────────────────────
 function renderPick(el){
-  const {cand,g1,g2,g3,g4,g5,g6,g8}=allGroups();
+  const {cand,g1,g3,g5,g6,g8,g9}=allGroups();
   const ex=excluded();
   const zc=zoneCounts(10);
   const {hot,cold}=hotCold(zc);
@@ -1108,64 +1049,26 @@ function renderPick(el){
 
   ${(()=>{
     if(!rec[0]) return '';
-    const pred = predictNextDraw();
+    const g = g9;
     const last5 = rec[0].n;
-    const top = pred.slice(0, 12);
-    const triple = pred.filter(x=>x.sigCount===3);
-
-    function miniBar(pct, clr) {
-      return `<div class="bar-wrap" style="height:5px;margin:1px 0"><div class="bar-fill" style="width:${pct}%;background:${clr};height:5px"></div></div>`;
-    }
-
-    const dual = pred.filter(x=>x.sigCount===2);
-    return `<div class="card">
-      <h3>📡 下期號碼預測（年度×55%＋動能×35%＋同伴×10%）</h3>
+    const distTop = Object.entries(g.dist).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const distTotal = Object.values(g.dist).reduce((a,b)=>a+b,0);
+    return `<div class="card" style="border-left:4px solid #16a34a">
+      <h3>🔁 G9 回歸熱區流（沉寂期數落在回歸排名前3間隔）</h3>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
         <span style="font-size:.78rem;color:var(--muted)">本期開出：</span>
         ${last5.map(n=>ball(n,'ball-sm')).join('')}
       </div>
-      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:.72rem;flex-wrap:wrap">
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#dc2626;vertical-align:middle;margin-right:3px"></span>年度 S3（頻率+尾偏）×55%</span>
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2563eb;vertical-align:middle;margin-right:3px"></span>動能 S4（近30期升溫比）×35%</span>
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9333ea;vertical-align:middle;margin-right:3px"></span>同伴 S5（共出頻率加持）×10%</span>
+      <div class="grp-nums" style="margin-bottom:8px">${g.nums.map(n=>ball(n)).join('')}</div>
+      <div class="grp-meta">
+        <span style="color:#16a34a;font-weight:700">★ 100期滾動回測 0.75碼/期（隨機0.64），全策略最佳；≥1中率 61%</span><br>
+        歷史回歸最常見間隔：${distTop.map(([gp,c])=>`<strong>${gp}期</strong>(${(c/distTotal*100).toFixed(1)}%)`).join('、')}<br>
+        本期熱區間隔：<strong>${g.top3.join('、')} 期</strong>｜符合號碼池 ${g.poolSize} 個，取雙信號分前5<br>
+        號碼：${g.nums.map(n=>`${f2(n)}(沉寂${g.gapFn(n)}期)`).join(' ')}
       </div>
-      <div style="font-size:.7rem;color:#d97706;background:#fef9c3;padding:5px 8px;border-radius:6px;margin-bottom:8px">
-        ⚠️ 逾期壓力信號已完全移除（回測僅1.09×隨機，不具預測效力）
-      </div>
-
-      ${dual.length ? `<div style="margin-bottom:10px;padding:7px 10px;background:#f0fdf4;border-radius:8px;font-size:.78rem">
-        <strong>⭐ 雙信號共振：</strong>
-        ${dual.slice(0,5).map(x=>`${ball(x.n,'ball-sm')}<span style="font-size:.68rem;color:#16a34a;margin-right:4px"> ${x.combined}分</span>`).join('')}
-        <span style="color:var(--muted)">（年度熱度＋近期升溫均≥65分）</span>
-      </div>` : ''}
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
-        ${top.map((x,i)=>{
-          const rank=i+1;
-          const rnkClr=rank<=3?'#dc2626':rank<=6?'#d97706':'#94a3b8';
-          const bdr = x.isLast?'border:2px solid #dc2626;':x.isSuperOD?'border:2px solid #9333ea;':x.isAlert9?'border:2px solid #d97706;':'border:1px solid var(--border);';
-          const badge = x.sigCount===2?'⭐':x.isLast?'🔁':x.isSuperOD?'💥':x.isAlert9?'🚨':'';
-          return `<div style="padding:7px 9px;border-radius:9px;background:var(--card);${bdr}">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-              <span style="font-size:.7rem;font-weight:700;color:${rnkClr};width:14px">${rank}</span>
-              ${ball(x.n,'ball-sm')}
-              <span style="font-size:.8rem;font-weight:700;margin-left:auto">${x.combined}</span>
-              <span style="font-size:.72rem">${badge}</span>
-            </div>
-            <div style="font-size:.65rem;color:#dc2626;display:flex;justify-content:space-between;margin-bottom:1px">
-              <span>年度</span><span>${x.s3p}</span>
-            </div>
-            ${miniBar(x.s3p,'#dc2626')}
-            <div style="font-size:.65rem;color:#2563eb;display:flex;justify-content:space-between;margin-bottom:1px;margin-top:3px">
-              <span>動能×${x.momRatio}</span><span>${x.s4p}</span>
-            </div>
-            ${miniBar(x.s4p,'#2563eb')}
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="font-size:.68rem;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap">
-        <span>🔁 連莊候選紅框</span><span>💥 超期（≥2倍）紫框</span><span>🚨 警戒9期橙框</span><span>⭐ 雙信號共振</span>
-        <span style="margin-left:auto">${pred.length}號參與評分</span>
+      <div class="verify-row">
+        ${ck(g.nums.every(n=>g.top3.includes(g.gapFn(n))),'全在回歸熱區')}
+        ${ck(g.poolSize>=5,'熱區池≥5碼')}
       </div>
     </div>`;
   })()}
@@ -1184,17 +1087,6 @@ function renderPick(el){
     </div>`;
   })}
 
-  ${grpCard('⚡','近期動能流（近30期升溫，效力1.46×）',g2,g=>{
-    return `<div class="grp-meta">
-      <span style="color:#2563eb;font-weight:700">近30期升溫信號，捕捉短期熱號持續性</span><br>
-      號碼：${g.nums.map(n=>`${f2(n)}(動能×${g.momFn(n).toFixed(2)},年${ANNUAL.freq[n]}次)`).join(' ')}
-    </div>
-    <div class="verify-row">
-      ${ck(g.nums.every(n=>g.momFn(n)>=1.0),'全部升溫中')}
-      ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
-    </div>`;
-  })}
-
   ${grpCard('⚖️','均衡區間流（三區覆蓋+雙信號選號）',g3,g=>{
     const sum=g.nums.reduce((a,b)=>a+b,0);
     const zd={1:0,2:0,3:0,4:0}; g.nums.forEach(n=>{zd[Z(n)]++;});
@@ -1206,18 +1098,6 @@ function renderPick(el){
     <div class="verify-row">
       ${ck(zd[4]<=1,'四區≤1碼')}
       ${ck(sum>=80&&sum<=120,'總和80-120')}
-      ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
-    </div>`;
-  })}
-
-  ${grpCard('🌡️','冷轉熱流（年度冷號+近期反轉動能）',g4,g=>{
-    return `<div class="grp-meta">
-      <span style="color:#d97706;font-weight:700">捕捉「沉寂已久但最近開始升溫」的反轉信號</span><br>
-      篩選條件：年度頻率≤${Math.floor(ANNUAL.periods*5/39*0.9)}次（低於期望值×90%）且近30期動能≥1.1<br>
-      號碼：${g.nums.map(n=>`${f2(n)}(年${ANNUAL.freq[n]}次,動能×${g.momFn(n).toFixed(2)})`).join(' ')}
-    </div>
-    <div class="verify-row">
-      ${ck(g.nums.some(n=>g.momFn(n)>=1.2),'有動能≥1.2碼')}
       ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
     </div>`;
   })}
@@ -1289,9 +1169,9 @@ function renderPick(el){
 
   <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
     <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
-    <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上8組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
-    <button class="btn" onclick="lockPick()" style="font-size:.95rem;padding:11px 28px">${pendingPick?'🔒 重新鎖定（覆蓋舊預測）':'🔒 鎖定本期全部預測（G1–G8含均衡複合）'}</button>
-    ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定8組（含均衡複合G8），等待下期開獎結果</div>`:''}
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上6組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
+    <button class="btn" onclick="lockPick()" style="font-size:.95rem;padding:11px 28px">${pendingPick?'🔒 重新鎖定（覆蓋舊預測）':'🔒 鎖定本期全部預測（G1/G3/G5/G6/G8/G9）'}</button>
+    ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定6組（含回歸熱區G9），等待下期開獎結果</div>`:''}
     <div style="margin-top:8px"><button onclick="go('track')" style="border:none;background:none;color:var(--primary);font-size:.8rem;cursor:pointer;text-decoration:underline">查看中獎追蹤 →</button></div>
   </div>`;
 }
@@ -1639,18 +1519,14 @@ function delRec(i){
 
 // ── RENDER: TRACK ──────────────────────────────────────────
 function backtestGroups() {
-  const {g1,g2,g3,g4,g5,g6,g8} = allGroups();
-  const pred = predictNextDraw();
-  const g7 = pred.length>=5 ? {nums:pred.slice(0,5).map(x=>x.n)} : null;
+  const {g1,g3,g5,g6,g8,g9} = allGroups();
   const grps = [
     {key:'G1', label:'📅年度熱號', g:g1},
-    {key:'G2', label:'⚡近期動能', g:g2},
     {key:'G3', label:'⚖️均衡區間', g:g3},
-    {key:'G4', label:'🌡️冷轉熱', g:g4},
     {key:'G5', label:'🎯熱尾優先', g:g5},
     {key:'G6', label:'⏳遺漏壓力', g:g6},
-    {key:'G7', label:'📡雙信號預測', g:g7},
     {key:'G8', label:'🎰年度+動能', g:g8},
+    {key:'G9', label:'🔁回歸熱區', g:g9},
   ];
   const draws = rec.slice(0, rec.length);
   return grps.map(({key,label,g}) => {
@@ -1693,7 +1569,7 @@ function rollingBacktestAll() {
   const all=Array.from({length:POOL},(_,i)=>i+1);
   const BT=Math.min(50,rec.length-30);
   if(BT<5) return null;
-  const H={G1:[],G2:[],G3:[],G4:[],G5:[],G6:[],G7:[],G8:[]};
+  const H={G1:[],G3:[],G5:[],G6:[],G8:[],G9:[]};
   for(let i=0;i<BT;i++){
     const tr=rec.slice(i+1);
     if(tr.length<20) continue;
@@ -1714,16 +1590,10 @@ function rollingBacktestAll() {
     for(let j=0;j<tr.length;j++){tr[j].n.forEach(n=>{if(n<=POOL&&gIdx[n]===tr.length)gIdx[n]=j;});if(all.every(n=>gIdx[n]<tr.length))break;}
     const gapFn=n=>gIdx[n];
     H.G1.push([...all].sort((a,b)=>freq[b]-freq[a]).slice(0,PICK).filter(n=>actual.includes(n)).length);
-    H.G2.push([...all].sort((a,b)=>momFn(b)-momFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
     const byZ={};for(let z=1;z<=4;z++) byZ[z]=[...all.filter(n=>Zfn(n)===z)].sort((a,b)=>dualFn(b)-dualFn(a));
     let g3p=[...byZ[1].slice(0,2),...byZ[2].slice(0,2),...byZ[3].slice(0,2)];
     if(g3p.length<PICK) g3p=[...g3p,...byZ[4]].filter((n,i,a)=>a.indexOf(n)===i);
     H.G3.push(g3p.sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
-    const cT=Math.floor(periods*PICK/POOL*0.9);
-    let g4p=[...all].filter(n=>freq[n]<=cT&&momFn(n)>=1.1).sort((a,b)=>momFn(b)-momFn(a));
-    if(g4p.length<PICK) g4p=[...g4p,...[...all].filter(n=>momFn(n)>=1.0&&!g4p.includes(n)).sort((a,b)=>momFn(b)-momFn(a))];
-    if(g4p.length<PICK) g4p=[...all].sort((a,b)=>gapFn(b)-gapFn(a));
-    H.G4.push(g4p.slice(0,PICK).filter(n=>actual.includes(n)).length);
     const hotT=tBias.map((b,t)=>b>=8?t:-1).filter(t=>t>=0);
     const effH=hotT.length?hotT:[1,5,6,8];
     const hpAll=[...all.filter(n=>effH.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
@@ -1731,14 +1601,17 @@ function rollingBacktestAll() {
     const hpk=hpAll.slice(0,Math.min(4,hpAll.length));
     H.G5.push([...hpk,...cpAll.filter(n=>!hpk.includes(n)).slice(0,PICK-hpk.length)].slice(0,PICK).filter(n=>actual.includes(n)).length);
     H.G6.push([...all].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
-    const g7fn=n=>(gapFn(n)/(tr.length+1))*40+(annFn(n)/s3max)*35+(momFn(n)/momMax)*25;
-    H.G7.push([...all].sort((a,b)=>g7fn(b)-g7fn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
     const g8fn=n=>(annFn(n)/s3max)*60+(momFn(n)/momMax)*40;
     H.G8.push([...all].sort((a,b)=>g8fn(b)-g8fn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const rDist=buildReturnDist(tr);
+    const rTop3=Object.entries(rDist).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([g])=>+g);
+    let g9p=all.filter(n=>rTop3.includes(gapFn(n)));
+    if(!g9p.length) g9p=all;
+    H.G9.push([...g9p].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
   }
   const randExp=+(PICK*PICK/POOL).toFixed(2);
   const res={randExp,BT:H.G1.length};
-  for(const k of ['G1','G2','G3','G4','G5','G6','G7','G8']){
+  for(const k of ['G1','G3','G5','G6','G8','G9']){
     const h=H[k];if(!h.length){res[k]={avg:null,excess:null};continue;}
     const avg=+(h.reduce((a,b)=>a+b,0)/h.length).toFixed(2);
     res[k]={avg,excess:+(avg-randExp).toFixed(2)};
@@ -1752,8 +1625,9 @@ function renderTrack(el) {
   const N = validBt[0]?.total || 0;
 
   // per-group log averages
-  const gKeys = ['G1','G2','G3','G4','G5','G6','G7','G8'];
-  const gNames = {G1:'📅年度熱號',G2:'⚡近期動能',G3:'⚖️均衡區間',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力',G7:'📡雙信號預測',G8:'🎰年度+動能'};
+  // G2/G4/G7 已停用（2026-07-02 回測移除），保留於清單以顯示歷史紀錄
+  const gKeys = ['G1','G2','G3','G4','G5','G6','G7','G8','G9'];
+  const gNames = {G1:'📅年度熱號',G2:'⚡近期動能(停)',G3:'⚖️均衡區間',G4:'🌡️冷轉熱(停)',G5:'🎯熱尾優先',G6:'⏳遺漏壓力',G7:'📡雙信號(停)',G8:'🎰年度+動能',G9:'🔁回歸熱區'};
   const logAvg = {};
   gKeys.forEach(k => {
     const rel = pickLog.filter(l => l.hits && l.hits[k] !== undefined);
@@ -1815,7 +1689,7 @@ function renderTrack(el) {
     `<div style="color:var(--muted);font-size:.83rem;text-align:center;padding:20px">尚無紀錄。<br>在選號頁鎖定預測並輸入開獎號碼後，命中結果將在此顯示。</div>` :
     `<div style="overflow-x:auto">
     <table>
-      <thead><tr><th>期號</th><th>開獎號碼</th><th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th><th>G6</th><th>G7雙信號</th><th>G8動能</th><th>最佳</th></tr></thead>
+      <thead><tr><th>期號</th><th>開獎號碼</th>${gKeys.map(k=>`<th>${k}</th>`).join('')}<th>最佳</th></tr></thead>
       <tbody>${pickLog.map(l => {
         const maxH = l.hits ? Math.max(...Object.values(l.hits), 0) : 0;
         const bestG = l.hits ? (Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0] : '';
@@ -1878,14 +1752,14 @@ function renderTrack(el) {
       🔬 <strong>全策略滾動回測（${rb.BT}期 · 無資料洩漏）</strong>　隨機基準 ${rb.randExp} 碼/期
       <div style="overflow-x:auto;margin-top:6px"><table style="width:100%;font-size:.72rem">
         <thead><tr><th style="text-align:left">策略</th><th style="text-align:center">平均/期</th><th style="text-align:center">超額</th></tr></thead>
-        <tbody>${['G1','G2','G3','G4','G5','G6','G7','G8'].map(k=>{
+        <tbody>${['G1','G3','G5','G6','G8','G9'].map(k=>{
           const r=rb[k];
           if(!r||r.avg===null) return `<tr><td>${gNames[k]}</td><td colspan="2" style="text-align:center;color:var(--muted)">—</td></tr>`;
           const c=r.excess>0.05?'#16a34a':r.excess>-0.05?'#d97706':'#dc2626';
           return `<tr><td>${gNames[k]}</td><td style="text-align:center;font-weight:700;color:${c}">${r.avg}</td><td style="text-align:center;font-weight:700;color:${c}">${r.excess>=0?'+':''}${r.excess}</td></tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div style="color:#6b7280;margin-top:4px;font-size:.68rem">⚠️ G7 使用簡化版滾動回測（gap+年度+動能複合），與實際 G7 略有差異</div>
+      <div style="color:#6b7280;margin-top:4px;font-size:.68rem">ℹ️ G2/G4/G7 已於 2026-07-02 依 100 期回測移除（均中低於隨機期望）；G9 回歸熱區同日新增</div>
     </div>`:''}
     ${(()=>{
       const avRows=pickLog.filter(l=>l.excludedHits!=null&&l.excluded);

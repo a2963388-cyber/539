@@ -200,9 +200,6 @@ def _build_dual(cand, records, annual):
         return (ann_score(n, annual)/s3max)*60 + (mom_fn(n)/mom_max)*40
     return dual_fn, mom_fn
 
-def gen_g1(cand, annual):
-    return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:6])
-
 def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:6])
@@ -287,13 +284,33 @@ def predict_g7(records, st_mg, annual):
         reverse=True)
     return sorted(scored[:6])
 
+def build_return_dist(records):
+    """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
+    dist, last_seen = {}, {}
+    for i, r in enumerate(reversed(records)):
+        for n in r['n']:
+            if n in last_seen:
+                gap = i - last_seen[n] - 1
+                dist[gap] = dist.get(gap, 0) + 1
+            last_seen[n] = i
+    return dist
+
+def gen_g9(records, annual):
+    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前6"""
+    dist = build_return_dist(records)
+    top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
+    ab = calc_absent(records)
+    pool = [n for n in range(1, 50) if ab[n] in top3] or list(range(1, 50))
+    dual_fn, _ = _build_dual(pool, records, annual)
+    return sorted(sorted(pool, key=dual_fn, reverse=True)[:6])
+
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual: return {}
     ab   = calc_absent(records)
     cand = [n for n in range(1,50) if ab[n]<st_mg.get(n,999)] or list(range(1,50))
+    # G1 已於 2026-07-02 依 180 期滾動回測移除（均中 0.694 低於隨機期望 0.735）
     strategies = {
-        'G1': gen_g1(cand, annual),
         'G2': gen_g2(cand, records, annual),
         'G3': gen_g3(cand, records, annual),
         'G4': gen_g4(cand, records, annual),
@@ -303,6 +320,7 @@ def gen_all_predictions(records, st_mg):
     }
     g8 = gen_g8(cand, records, annual)
     if g8: strategies['G8'] = g8
+    strategies['G9'] = gen_g9(records, annual)
     return strategies
 
 

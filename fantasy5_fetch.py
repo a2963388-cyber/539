@@ -185,36 +185,6 @@ def build_mom(records: list, annual: dict):
         return 0 if e < 0.001 else (rf[n] / rN) / e
     return rN, rf, mom_fn
 
-def build_pair_stat(records: list) -> dict:
-    pairs = {}
-    for r in records:
-        s = sorted(r['n'])
-        for i in range(len(s) - 1):
-            for j in range(i + 1, len(s)):
-                k = f"{s[i]}-{s[j]}"
-                pairs[k] = pairs.get(k, 0) + 1
-    return pairs
-
-def ensure_consec(nums: list, cand: list, score_fn, annual: dict) -> list:
-    if annual['consecRate'] < 50:
-        return nums
-    nums_set = set(nums)
-    if any(n + 1 in nums_set for n in nums):
-        return nums
-    cand_set = set(cand)
-    by_score = sorted(nums, key=score_fn)
-    for to_out in by_score:
-        others = [n for n in nums if n != to_out]
-        adj = set()
-        for n in others:
-            for nb in [n - 1, n + 1]:
-                if 1 <= nb <= 39 and nb not in nums_set and nb in cand_set:
-                    adj.add(nb)
-        if adj:
-            best = max(adj, key=score_fn)
-            return sorted(others + [best])
-    return nums
-
 def _build_dual(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     s3max   = max((ann_score(n, annual) for n in cand), default=0.01)
@@ -223,27 +193,9 @@ def _build_dual(cand, records, annual):
         return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
     return dual_fn, mom_fn
 
-def gen_g1(cand, annual):
-    return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:5])
-
 def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:5])
-
-def gen_g3(cand, records, annual):
-    dual_fn, _ = _build_dual(cand, records, annual)
-    by_z = {}
-    for zn in [1, 2, 3, 4]:
-        by_z[zn] = sorted([n for n in cand if z_zone(n) == zn], key=dual_fn, reverse=True)
-    pool = by_z[1][:2] + by_z[2][:2] + by_z[3][:2]
-    if len(pool) < 5:
-        seen = set(pool)
-        for n in by_z[4]:
-            if n not in seen:
-                pool.append(n)
-                seen.add(n)
-    pool.sort(key=dual_fn, reverse=True)
-    return ensure_consec(sorted(pool[:5]), cand, dual_fn, annual)
 
 def gen_g4(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
@@ -268,63 +220,25 @@ def gen_g5(cand, records, annual):
     rest = [n for n in cold_pool if n not in set(hot_picks)][:5 - len(hot_picks)]
     return sorted((hot_picks + rest)[:5])
 
-def gen_g6(cand, records, annual):
-    _, mom_fn = _build_dual(cand, records, annual)
-    mom_max = max((mom_fn(n) for n in cand), default=0.01)
-    must  = [annual['hotNum']] if annual['hotNum'] in cand else []
-    pool  = [n for n in cand if n not in must]
-    scored = sorted(pool, key=lambda n: ann_score(n, annual) * 0.6 + (mom_fn(n) / mom_max) * 100 * 0.4,
-                    reverse=True)
-    return sorted(must + scored[:5 - len(must)])
-
-def gen_g8(cand, records, annual):
-    rN = min(30, len(records))
-    rf = [0] * 40
-    for r in records[:rN]:
+def build_return_dist(records):
+    """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
+    dist, last_seen = {}, {}
+    for i, r in enumerate(reversed(records)):
         for n in r['n']:
-            rf[n] += 1
-    ann_per = annual['periods']
-    def mom_fn(n):
-        e = annual['freq'][n] / ann_per
-        return 0 if e < 0.001 else (rf[n] / rN) / e
-    s3max   = max((ann_score(n, annual) for n in cand), default=0.01)
-    mom_max = max((mom_fn(n)            for n in cand), default=0.01)
-    def dual_fn(n):
-        return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
-    top5raw = sorted(cand, key=dual_fn, reverse=True)[:5]
-    if len(top5raw) < 5:
-        return None
-    return ensure_consec(sorted(top5raw), cand, dual_fn, annual)
+            if n in last_seen:
+                gap = i - last_seen[n] - 1
+                dist[gap] = dist.get(gap, 0) + 1
+            last_seen[n] = i
+    return dist
 
-def predict_g7(records, st_mg, annual):
-    ab    = calc_absent(records)
-    cand  = [n for n in range(1, 40) if ab[n] < st_mg.get(n, 999)] or list(range(1, 40))
-    s3max = max((ann_score(n, annual) for n in cand), default=0.01)
-    rN = min(30, len(records))
-    rf = [0] * 40
-    for r in records[:rN]:
-        for n in r['n']:
-            rf[n] += 1
-    ann_per = annual['periods']
-    def s4fn(n):
-        e = annual['freq'][n] / ann_per
-        return 0 if e < 0.001 else (rf[n] / rN) / e
-    s4max = max((s4fn(n) for n in cand), default=0.01)
-    prelim = sorted(cand, key=lambda n: ann_score(n, annual)/s3max*60 + s4fn(n)/s4max*40, reverse=True)
-    friend_pool = prelim[:15]
-    pairs = build_pair_stat(records)
-    def pair_score(n):
-        s = 0
-        for m in friend_pool:
-            if m == n: continue
-            k = '-'.join(str(x) for x in sorted([n, m]))
-            s += pairs.get(k, 0)
-        return s
-    pair_max = max((pair_score(n) for n in cand), default=1) or 1
-    scored = sorted(cand,
-                    key=lambda n: ann_score(n,annual)/s3max*55 + s4fn(n)/s4max*35 + pair_score(n)/pair_max*10,
-                    reverse=True)
-    return sorted(scored[:5])
+def gen_g9(records, annual):
+    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前5"""
+    dist = build_return_dist(records)
+    top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
+    ab = calc_absent(records)
+    pool = [n for n in range(1, 40) if ab[n] in top3] or list(range(1, 40))
+    dual_fn, _ = _build_dual(pool, records, annual)
+    return sorted(sorted(pool, key=dual_fn, reverse=True)[:5])
 
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
@@ -332,20 +246,14 @@ def gen_all_predictions(records, st_mg):
         return {}
     ab   = calc_absent(records)
     cand = [n for n in range(1, 40) if ab[n] < st_mg.get(n, 999)] or list(range(1, 40))
+    # G1/G3/G6/G7/G8 已於 2026-07-02 依 130 期滾動回測移除（均中低於隨機期望 0.641）
     strategies = {
-        'G1': gen_g1(cand, annual),
         'G2': gen_g2(cand, records, annual),
-        'G3': gen_g3(cand, records, annual),
         'G4': gen_g4(cand, records, annual),
         'G5': gen_g5(cand, records, annual),
-        'G6': gen_g6(cand, records, annual),
-        'G7': predict_g7(records, st_mg, annual),
+        'G9': gen_g9(records, annual),
     }
-    g8 = gen_g8(cand, records, annual)
-    if g8:
-        strategies['G8'] = g8
     return strategies
-
 
 # ── 讀取 BASE_ST 的 mg 值 ─────────────────────────────────────
 def read_base_st(html: str) -> dict:
