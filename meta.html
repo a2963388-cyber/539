@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跨系統整合分析 Meta-Analysis</title>
+<style>
+:root {
+  --bg: #f0f4f8; --card: #ffffff; --primary: #4338ca; --text: #1e293b;
+  --muted: #64748b; --border: #e2e8f0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+header { background: linear-gradient(135deg, #312e81, #4338ca); color: #fff; padding: 18px 16px 14px; }
+header h1 { font-size: 1.15rem; }
+header p { font-size: .78rem; opacity: .85; margin-top: 4px; }
+nav { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
+nav a { font-size: .78rem; padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); font-weight: 600; }
+main { max-width: 860px; margin: 0 auto; padding: 6px 12px 40px; }
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card h3 { font-size: .95rem; margin-bottom: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+th, td { padding: 6px 7px; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
+th { background: #f8fafc; font-size: .72rem; color: var(--muted); }
+td:first-child { text-align: left; font-weight: 600; }
+.scroll { overflow-x: auto; }
+.note { font-size: .72rem; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+.box-warn { font-size: .78rem; background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px; padding: 9px 12px; margin-top: 10px; line-height: 1.65; }
+.box-ok { font-size: .78rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 9px 12px; margin-top: 10px; line-height: 1.65; }
+.pos { color: #16a34a; font-weight: 700; } .neg { color: #dc2626; font-weight: 700; }
+.dim { color: var(--muted); font-size: .72rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 跨系統整合分析（Meta-Analysis）</h1>
+  <p>把同一策略家族在 今彩539 ＋ CA Fantasy 5 ＋ 香港六合彩 的成績合併檢定，用三倍樣本換取更早的統計結論</p>
+</header>
+<nav>
+  <a href="index.html">🍀 今彩539</a>
+  <a href="fantasy5.html">🌟 Fantasy 5</a>
+  <a href="marksix.html">🔴 六合彩</a>
+</nav>
+<main>
+  <div class="card">
+    <h3>📊 真實押注紀錄合併（out-of-sample，自動隨資料累積更新）</h3>
+    <div id="live">讀取三系統資料中…</div>
+    <div class="note">
+      方法：各系統的「超額命中」（平均命中 − 該系統隨機期望）以 inverse-variance 固定效應合併；
+      標準誤採用虛無假設下的超幾何理論值（539/F5：σ=0.707、期望0.641；六合彩：σ=0.760、期望0.735），小樣本下比樣本標準差穩定。
+      顯著門檻採 Bonferroni 校正（0.05 ÷ 檢定策略數，G0 對照組不計入）。
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔬 滾動回測合併快照（2026-07-03，共 410 期 out-of-sample）</h3>
+    <div id="snapshot"></div>
+    <div class="box-warn">
+      ⚠️ <strong>本快照最重要的一課：全場 z 值最高的是 G0 隨機對照組（z=1.97，名目 p=0.048）。</strong>
+      純隨機選號「名目顯著地打贏隨機」——這在數學上不可能是真的預測力，它示範了同時檢定 10 組策略時，
+      靠運氣跑出一個 p&lt;0.05 是意料中事。這正是本頁採用 Bonferroni 校正（門檻 p&lt;0.0056）的原因：
+      <strong>校正後沒有任何策略顯著</strong>，包括 G0。
+    </div>
+    <div class="note">
+      快照為固定日期的離線計算（539×100期＋F5×130期＋六合彩×180期滾動回測，當前策略程式碼含 G5 卡方把關版），不隨頁面更新；上方真實押注表才是持續累積的證據。
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📖 如何讀這一頁</h3>
+    <div class="note" style="font-size:.78rem;color:var(--text)">
+      1️⃣ <strong>為什麼要合併？</strong>單一系統要偵測 +0.1 碼/期的微小優勢，約需 400+ 期才有八成檢定力。三系統合併讓樣本累積速度變三倍。<br><br>
+      2️⃣ <strong>合併的前提：</strong>假設同一策略家族（例如「回歸熱區」）在不同彩池有同方向的效果。若某策略在各系統方向相反（一正一負），合併值會互相抵消——表中保留各系統分項讓你自行判斷異質性。<br><br>
+      3️⃣ <strong>誠實警告：</strong>各系統保留哪些策略是先看回測挑過的（選擇偏差），因此回測快照的數字偏樂觀；真實押注表是事前鎖定的預測，才是乾淨的證據，只是需要時間累積。<br><br>
+      4️⃣ <strong>期望管理：</strong>彩券開獎在數學上獨立均勻，任何策略的長期期望超額都是 0。這一頁存在的意義是「用正確的方法測量」，而測量的誠實結論很可能就是：G0 和大家一樣好。
+    </div>
+  </div>
+</main>
+
+<script>
+const SYS = [
+  {key:'539', name:'今彩539',     file:'data_539.js', pick:5, pool:39},
+  {key:'F5',  name:'Fantasy 5',   file:'data_f5.js',  pick:5, pool:39},
+  {key:'M6',  name:'六合彩',      file:'data_m6.js',  pick:6, pool:49},
+];
+const GNAMES = {G0:'🎲隨機對照',G1:'📅年度熱號',G2:'⚡近期動能',G3:'⚖️均衡區間',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力',G7:'📡雙信號',G8:'🎰年度+動能',G9:'🔁回歸熱區'};
+
+function pnorm(z){
+  const t=1/(1+0.2316419*Math.abs(z));
+  const p=1-(1/Math.sqrt(2*Math.PI))*Math.exp(-z*z/2)*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  return z>=0?p:1-p;
+}
+const mu = s => s.pick*s.pick/s.pool;
+const sd0 = s => Math.sqrt(s.pick*(s.pick/s.pool)*(1-s.pick/s.pool)*((s.pool-s.pick)/(s.pool-1)));
+
+Promise.all(SYS.map(s =>
+  fetch(s.file).then(r=>r.text()).then(t=>{
+    const m = t.match(/const BASE_PICKLOG = (\[[\s\S]*?\]);/);
+    s.log = m ? JSON.parse(m[1]) : [];
+    return s;
+  }).catch(()=>{ s.log=[]; return s; })
+)).then(systems => {
+  // 逐策略收集各系統命中
+  const fam = {};
+  systems.forEach(s => {
+    s.log.forEach(e => {
+      if(!e.hits) return;
+      Object.entries(e.hits).forEach(([k,h]) => {
+        fam[k] = fam[k] || {};
+        (fam[k][s.key] = fam[k][s.key] || []).push(h);
+      });
+    });
+  });
+  const keys = Object.keys(fam).sort((a,b)=>(a==='G0')-(b==='G0')||a.localeCompare(b));
+  const mTests = keys.filter(k=>k!=='G0').length || 1;
+  const alphaB = 0.05/mTests;
+  const rows = keys.map(k => {
+    const parts = SYS.filter(s=>fam[k][s.key]).map(s => {
+      const h = fam[k][s.key], n = h.length;
+      const mean = h.reduce((a,b)=>a+b,0)/n;
+      return {key:s.key, n, excess: mean-mu(s), se: sd0(s)/Math.sqrt(n)};
+    });
+    const wSum = parts.reduce((a,p)=>a+1/(p.se*p.se),0);
+    const pooled = parts.reduce((a,p)=>a+p.excess/(p.se*p.se),0)/wSum;
+    const z = pooled/Math.sqrt(1/wSum);
+    const pv = 2*(1-pnorm(Math.abs(z)));
+    const N = parts.reduce((a,p)=>a+p.n,0);
+    return {k, parts, pooled, z, pv, N};
+  }).sort((a,b)=>b.z-a.z);
+  const totalN = rows.length? Math.max(...rows.map(r=>r.N)) : 0;
+  const cell = v => `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(3)}</span>`;
+  document.getElementById('live').innerHTML = rows.length ? `
+    <div class="scroll"><table>
+      <thead><tr><th>策略</th>${SYS.map(s=>`<th>${s.name}<br>超額(n)</th>`).join('')}<th>合併超額</th><th>合併N</th><th>z</th><th>p</th><th>判定</th></tr></thead>
+      <tbody>${rows.map(r=>{
+        const byKey = Object.fromEntries(r.parts.map(p=>[p.key,p]));
+        const verdict = r.N<10 ? '<span class="dim">樣本不足</span>'
+          : r.pv<alphaB ? (r.pooled>0?'✅ 顯著（過校正）':'❌ 顯著劣於隨機')
+          : r.pv<0.05 ? '⚠️ 名目顯著' : '— 未顯著';
+        return `<tr${r.k==='G0'?' style="background:#f8fafc"':''}>
+          <td>${GNAMES[r.k]||r.k}${r.k==='G0'?' <span class="dim">(對照)</span>':''}</td>
+          ${SYS.map(s=>{const p=byKey[s.key];return `<td>${p?`${cell(p.excess)} <span class="dim">(${p.n})</span>`:'<span class="dim">—</span>'}</td>`;}).join('')}
+          <td>${cell(r.pooled)}</td><td>${r.N}</td><td>${r.z.toFixed(2)}</td><td>${r.pv.toFixed(3)}</td><td style="white-space:normal">${verdict}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div class="note">同時檢定 ${mTests} 組（G0 不計入）→ Bonferroni 門檻 <strong>p&lt;${alphaB.toFixed(4)}</strong>｜最大合併樣本 ${totalN} 期，累積中</div>
+  ` : '<div class="dim">尚無押注紀錄</div>';
+});
+
+// ── 滾動回測快照（2026-07-03 離線計算）──
+const SNAPSHOT = {
+  "G0": {"systems": {"539": {"n":100,"excess":0.079}, "F5": {"n":130,"excess":0.005}, "M6": {"n":180,"excess":0.121}}, "pooled":0.071, "z":1.97, "p":0.048},
+  "G1": {"systems": {"539": {"n":100,"excess":0.089}}, "pooled":0.089, "z":1.26, "p":0.208},
+  "G2": {"systems": {"F5": {"n":130,"excess":-0.033}, "M6": {"n":180,"excess":0.121}}, "pooled":0.051, "z":1.22, "p":0.223},
+  "G3": {"systems": {"539": {"n":100,"excess":0.059}, "M6": {"n":180,"excess":0.082}}, "pooled":0.073, "z":1.65, "p":0.099},
+  "G4": {"systems": {"F5": {"n":130,"excess":0.005}, "M6": {"n":180,"excess":0.026}}, "pooled":0.016, "z":0.39, "p":0.694},
+  "G5": {"systems": {"539": {"n":100,"excess":0.049}, "F5": {"n":130,"excess":-0.126}, "M6": {"n":180,"excess":0.065}}, "pooled":-0.004, "z":-0.10, "p":0.923},
+  "G6": {"systems": {"539": {"n":100,"excess":0.069}, "M6": {"n":180,"excess":0.043}}, "pooled":0.053, "z":1.20, "p":0.229},
+  "G7": {"systems": {"M6": {"n":180,"excess":0.076}}, "pooled":0.076, "z":1.34, "p":0.180},
+  "G8": {"systems": {"539": {"n":100,"excess":0.029}, "M6": {"n":180,"excess":0.071}}, "pooled":0.055, "z":1.23, "p":0.217},
+  "G9": {"systems": {"539": {"n":100,"excess":0.109}, "F5": {"n":130,"excess":-0.026}, "M6": {"n":180,"excess":0.093}}, "pooled":0.057, "z":1.58, "p":0.113}
+};
+(()=>{
+  const cell = v => `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(3)}</span>`;
+  const rows = Object.entries(SNAPSHOT).sort((a,b)=>b[1].z-a[1].z);
+  document.getElementById('snapshot').innerHTML = `
+    <div class="scroll"><table>
+      <thead><tr><th>策略</th>${SYS.map(s=>`<th>${s.name}</th>`).join('')}<th>合併超額</th><th>z</th><th>p</th></tr></thead>
+      <tbody>${rows.map(([k,v])=>`<tr${k==='G0'?' style="background:#fef2f2;font-weight:700"':''}>
+        <td>${GNAMES[k]||k}${k==='G0'?' ⚠️(對照)':''}</td>
+        ${SYS.map(s=>{const p=v.systems[s.key];return `<td>${p?`${cell(p.excess)} <span class="dim">(${p.n})</span>`:'<span class="dim">—</span>'}</td>`;}).join('')}
+        <td>${cell(v.pooled)}</td><td>${v.z.toFixed(2)}</td><td>${v.p.toFixed(3)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+})();
+</script>
+</body>
+</html>
