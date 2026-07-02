@@ -221,12 +221,26 @@ def gen_g4(cand, records, annual):
         picks = sorted(cand, key=mom_fn, reverse=True)
     return sorted(picks[:6])
 
+def tail_chi2(annual, pick, pool):
+    """尾數分佈 vs 均勻的卡方統計量（df=9），由 tailBias 反推"""
+    T = annual['periods']
+    zero_cnt = 3 if pool == 39 else 4
+    per_tail = 4 if pool == 39 else 5
+    chi2 = 0.0
+    for t, b in annual['tailBias'].items():
+        exp = T * pick * (zero_cnt if int(t) == 0 else per_tail) / pool
+        chi2 += exp * (b / 100.0) ** 2
+    return chi2
+
 def gen_g5(cand, records, annual):
     dual_fn, _ = _build_dual(cand, records, annual)
-    hot_tails = [t for t,b in annual['tailBias'].items() if b>=8]
-    eff_hot = hot_tails if hot_tails else [1,5,6,8]
-    hot_pool  = sorted([n for n in cand if n%10 in eff_hot], key=dual_fn, reverse=True)
-    cold_pool = sorted([n for n in cand if n%10 not in eff_hot], key=dual_fn, reverse=True)
+    # 卡方把關（df=9, α=.05 臨界值16.92）：尾數分佈與均勻無顯著差異時不啟用熱尾強制
+    hot_tails = ([t for t, b in annual['tailBias'].items() if b >= 8]
+                 if tail_chi2(annual, 6, 49) >= 16.92 else [])
+    if not hot_tails:
+        return sorted(sorted(cand, key=dual_fn, reverse=True)[:6])
+    hot_pool  = sorted([n for n in cand if n%10 in hot_tails], key=dual_fn, reverse=True)
+    cold_pool = sorted([n for n in cand if n%10 not in hot_tails], key=dual_fn, reverse=True)
     hot_picks = hot_pool[:min(5, len(hot_pool))]
     rest = [n for n in cold_pool if n not in set(hot_picks)][:6-len(hot_picks)]
     return sorted((hot_picks+rest)[:6])

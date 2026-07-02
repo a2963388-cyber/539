@@ -434,17 +434,25 @@ function genG3(cand) {
 // G5: 熱尾優先流 — 動態從 ANNUAL.tailBias 找偏熱/偏冷尾，強制從熱尾選3+碼
 function genG5(cand) {
   const {dualFn} = buildDual(cand);
-  const hotTails = Object.entries(ANNUAL.tailBias).filter(([,b])=>+b>=8).map(([t])=>+t);
-  const coldTails = Object.entries(ANNUAL.tailBias).filter(([,b])=>+b<=-8).map(([t])=>+t);
-  const effectiveHot = hotTails.length ? hotTails : [1,5,6,8];
-  const hotPool = [...cand.filter(n=>effectiveHot.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
-  const coldPool = [...cand.filter(n=>!effectiveHot.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+  // 卡方把關（df=9, α=.05 臨界16.92）：尾數分佈與均勻無顯著差異時不啟用熱尾強制
+  const T=ANNUAL.periods;
+  let chi2=0;
+  for(const [t,b] of Object.entries(ANNUAL.tailBias)){const e=T*5*((+t===0?3:4))/39;chi2+=e*Math.pow((+b)/100,2);}
+  const tailSig=chi2>=16.92;
+  const hotTails=tailSig?Object.entries(ANNUAL.tailBias).filter(([,b])=>+b>=8).map(([t])=>+t):[];
+  const coldTails=Object.entries(ANNUAL.tailBias).filter(([,b])=>+b<=-8).map(([t])=>+t);
+  if(!hotTails.length){
+    const nums=[...cand].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,5).sort((a,b)=>a-b);
+    return {nums, highTailCnt:0, coldTailCnt:nums.filter(n=>coldTails.includes(n%10)).length, dualFn, hotTails, coldTails, chi2:+chi2.toFixed(1), tailSig};
+  }
+  const hotPool = [...cand.filter(n=>hotTails.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+  const coldPool = [...cand.filter(n=>!hotTails.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
   const hotPicks = hotPool.slice(0, Math.min(4, hotPool.length));
   const rest = coldPool.filter(n=>!hotPicks.includes(n)).slice(0, 5-hotPicks.length);
   const picks = [...hotPicks, ...rest].slice(0,5);
-  const highTailCnt = picks.filter(n=>effectiveHot.includes(n%10)).length;
+  const highTailCnt = picks.filter(n=>hotTails.includes(n%10)).length;
   const coldTailCnt = picks.filter(n=>coldTails.includes(n%10)).length;
-  return {nums: picks.sort((a,b)=>a-b), highTailCnt, coldTailCnt, dualFn, hotTails: effectiveHot, coldTails};
+  return {nums: picks.sort((a,b)=>a-b), highTailCnt, coldTailCnt, dualFn, hotTails, coldTails, chi2:+chi2.toFixed(1), tailSig};
 }
 
 // G8: 雙信號複合流（年度熱度×60% + 近期動能×40%）— 回測：1.66×隨機（已剔除無效逾期信號）
@@ -548,12 +556,12 @@ function calcExcludeZone() {
   // S3: 馬可夫鏈（反向）
   const lastNums=rec[0]?.n||[];
   const mfSum=new Array(POOL+1).fill(0);let mfOpp=0;
-  lastNums.forEach(prev=>{if(conStat[prev]&&conStat[prev].total>0){const t=conStat[prev].total;all.forEach(m=>{mfSum[m]+=(conStat[prev].followedBy[m]||0)/t;});mfOpp++;}});
+  lastNums.forEach(prev=>{if(conStat[prev]&&conStat[prev].total>0){const t=conStat[prev].total;all.forEach(m=>{mfSum[m]+=((conStat[prev].followedBy[m]||0)+1)/(t+POOL);});mfOpp++;}});
   const mfRaw=n=>mfOpp>0?mfSum[n]/mfOpp:0;
   const mfMax=Math.max(...all.map(mfRaw),0.001);
   const S3=n=>(1-mfRaw(n)/mfMax)*100;
   // 加權合成 40%/30%/30%
-  const combined=n=>S2(n)*0.5+S3(n)*0.5;
+  const combined=n=>S2(n)*0.7+S3(n)*0.3;  // 馬可夫樣本不足，Laplace收縮+降權
   const cMax=Math.max(...all.map(combined),0.01);
   const exclude=[...all].sort((a,b)=>combined(b)-combined(a)).slice(0,EXCL);
   // 回測（近頻+區間，馬可夫略）
@@ -1116,13 +1124,20 @@ function renderPick(el){
     </div>`;
   })}
 
-  ${grpCard(`🎯`,`熱尾優先流（尾${g5?.hotTails?.join('/')||'?'}強制≥3碼+雙信號）`,g5,g=>{
-    const ht=g.hotTails, ct=g.coldTails;
-    const htStr=ht.map(t=>`尾${t}(${ANNUAL.tailBias[t]>0?'+':''}${ANNUAL.tailBias[t]}%)`).join('、');
-    const ctStr=ct.length?ct.map(t=>`尾${t}(${ANNUAL.tailBias[t]}%)`).join('、'):'無';
-    return `<div class="grp-meta">
+  ${grpCard(`🎯`,`熱尾優先流（${g5&&g5.tailSig?`尾${g5.hotTails.join('/')}強制+雙信號`:'尾數未顯著→純雙信號'}）`,g5,g=>{
+    const chiLine=`尾數卡方 χ²=${g.chi2}（df=9，門檻16.92）→ ${g.tailSig?'<span style="color:#16a34a;font-weight:700">顯著不均勻，啟用熱尾強制</span>':'<span style="color:#d97706;font-weight:700">與均勻無顯著差異，本期退化為雙信號取前5</span>'}`;
+    const ctStr=g.coldTails.length?g.coldTails.map(t=>`尾${t}(${ANNUAL.tailBias[t]}%)`).join('、'):'無';
+    if(!g.tailSig) return `<div class="grp-meta">${chiLine}<br>
+      號碼：${g.nums.map(n=>`${f2(n)}(尾${n%10},年${ANNUAL.freq[n]}次)`).join(' ')}
+    </div>
+    <div class="verify-row">
+      ${ck(true,'卡方把關生效')}
+      ${ck(g.nums.every(n=>!excl(n)),'候選池內')}
+    </div>`;
+    const htStr=g.hotTails.map(t=>`尾${t}(${ANNUAL.tailBias[t]>0?'+':''}${ANNUAL.tailBias[t]}%)`).join('、');
+    return `<div class="grp-meta">${chiLine}<br>
       熱尾：${htStr}；冷尾：${ctStr}<br>
-      本組熱尾(${ht.join('/')}) 共 <strong>${g.highTailCnt}</strong> 碼，冷尾(${ct.join('/')||'無'}) 共 <strong>${g.coldTailCnt}</strong> 碼<br>
+      本組熱尾(${g.hotTails.join('/')}) 共 <strong>${g.highTailCnt}</strong> 碼，冷尾 共 <strong>${g.coldTailCnt}</strong> 碼<br>
       號碼：${g.nums.map(n=>`${f2(n)}(尾${n%10},年${ANNUAL.freq[n]}次)`).join(' ')}
     </div>
     <div class="verify-row">
@@ -1163,8 +1178,8 @@ function renderPick(el){
     return`<div class="card" style="border-left:4px solid #7c3aed">
       <h3>🚫 不出牌預測區（建議排除 15 號｜剩餘 24 號為主力池）</h3>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-size:.72rem">
-        <span style="background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:5px;font-weight:600">區間輪動 50%</span>
-        <span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:5px;font-weight:600">馬可夫鏈 50%</span>
+        <span style="background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:5px;font-weight:600">區間輪動 70%</span>
+        <span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:5px;font-weight:600">馬可夫鏈 30%·Laplace收縮</span>
       </div>
       <div style="font-size:.73rem;padding:5px 8px;background:#f0f9ff;border-radius:6px;margin-bottom:6px">
         📊 區間輪動：<strong>${ZLbl[hotZone]}</strong> 過熱（理論值 ${(zHeat[hotZone]*100).toFixed(0)}%）→ 此區號碼排除加權
@@ -1636,12 +1651,17 @@ function rollingBacktestAll() {
     let g3p=[...byZ[1].slice(0,2),...byZ[2].slice(0,2),...byZ[3].slice(0,2)];
     if(g3p.length<PICK) g3p=[...g3p,...byZ[4]].filter((n,i,a)=>a.indexOf(n)===i);
     H.G3.push(g3p.sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
-    const hotT=tBias.map((b,t)=>b>=8?t:-1).filter(t=>t>=0);
-    const effH=hotT.length?hotT:[1,5,6,8];
-    const hpAll=[...all.filter(n=>effH.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
-    const cpAll=[...all.filter(n=>!effH.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
-    const hpk=hpAll.slice(0,Math.min(4,hpAll.length));
-    H.G5.push([...hpk,...cpAll.filter(n=>!hpk.includes(n)).slice(0,PICK-hpk.length)].slice(0,PICK).filter(n=>actual.includes(n)).length);
+    const chiT=tFreq.reduce((a,f,t)=>{const e=periods*PICK*((t===0?3:4))/POOL;return a+(e>0?Math.pow(f-e,2)/e:0);},0);
+    const hotT=chiT>=16.92?tBias.map((b,t)=>b>=8?t:-1).filter(t=>t>=0):[];
+    let g5pick;
+    if(!hotT.length){ g5pick=[...all].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK); }
+    else{
+      const hpAll=[...all.filter(n=>hotT.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+      const cpAll=[...all.filter(n=>!hotT.includes(n%10))].sort((a,b)=>dualFn(b)-dualFn(a));
+      const hpk=hpAll.slice(0,Math.min(4,hpAll.length));
+      g5pick=[...hpk,...cpAll.filter(n=>!hpk.includes(n)).slice(0,PICK-hpk.length)].slice(0,PICK);
+    }
+    H.G5.push(g5pick.filter(n=>actual.includes(n)).length);
     H.G6.push([...all].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
     const g8fn=n=>(annFn(n)/s3max)*60+(momFn(n)/momMax)*40;
     H.G8.push([...all].sort((a,b)=>g8fn(b)-g8fn(a)).slice(0,PICK).filter(n=>actual.includes(n)).length);
@@ -1684,6 +1704,9 @@ function renderTrack(el) {
     const stat=n>=3?statsFromVals(vals,RAND_EXP):null;
     return{k,n,tot,avg,excess,ci:stat?.ci??null,pval:stat?.pval??null,nNeeded:stat?.nNeeded??null};
   }).sort((a,b)=>(b.excess??-99)-(a.excess??-99));
+  // 多重比較校正：同時檢定 m 組策略（G0 對照組除外），Bonferroni 門檻 = 0.05/m
+  const mTests=perfRows.filter(r=>r.n>0&&r.k!=='G0').length||1;
+  const alphaB=+(0.05/mTests).toFixed(4);
   const POOL=39,PICK=5;
   const rb=rollingBacktestAll();
 
@@ -1772,7 +1795,7 @@ function renderTrack(el) {
           if(r.n===0) return `<tr><td style="font-size:.76rem">${gNames[r.k]}</td><td colspan="6" style="color:var(--muted);font-size:.75rem;text-align:center">無紀錄</td></tr>`;
           const exClr=r.excess>0.1?'#16a34a':r.excess>-0.1?'#d97706':'#dc2626';
           const pClr=r.pval===null?'#94a3b8':r.pval<0.05?'#16a34a':r.pval<0.10?'#d97706':'#94a3b8';
-          const badge=r.n<3?'⚠️ 樣本少':r.pval===null?'⚠️ 樣本少':r.pval<0.05&&r.excess>0?'✅ 顯著優於隨機':r.pval<0.05&&r.excess<=0?'❌ 顯著劣於隨機':r.pval<0.10?'⚠️ 趨勢（未顯著）':'— 尚不顯著';
+          const badge=r.n<3||r.pval===null?'⚠️ 樣本少':r.pval<alphaB&&r.excess>0?'✅ 顯著優於隨機（過校正）':r.pval<alphaB&&r.excess<=0?'❌ 顯著劣於隨機（過校正）':r.pval<0.05?'⚠️ 名目顯著，未過多重比較校正':r.pval<0.10?'— 趨勢（未顯著）':'— 尚不顯著';
           const ciStr=r.ci?`[${r.ci[0]}, ${r.ci[1]}]`:'—';
           const pStr=r.pval!==null?`p=${r.pval}`:'—';
           return `<tr>
@@ -1787,7 +1810,7 @@ function renderTrack(el) {
         }).join('')}</tbody>
       </table></div>
       <div style="font-size:.7rem;color:var(--muted);margin-top:6px">
-        超額 = 平均 − 隨機期望（${RAND_EXP}）｜95%CI 含 ${RAND_EXP} → 不顯著｜p&lt;0.05 才算統計顯著
+        超額 = 平均 − 隨機期望（${RAND_EXP}）｜95%CI 含 ${RAND_EXP} → 不顯著｜同時檢定 ${mTests} 組 → Bonferroni 門檻 <strong>p&lt;${alphaB}</strong>（p&lt;0.05 僅名目顯著）
         ${(()=>{const ns=perfRows.filter(r=>r.nNeeded&&r.excess>0).map(r=>r.nNeeded);return ns.length?`｜最快約 <strong>${Math.min(...ns)}</strong> 期可達顯著`:'';})()}
       </div>`}
     ${rb?`<div style="margin-top:10px;padding:10px;background:#f0fdf4;border-radius:7px;font-size:.75rem">
@@ -1895,7 +1918,47 @@ function renderTrack(el) {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">共統計 ${total} 次回歸事件，顯示次數最高的前 20 個間隔。可參考最高排名的間隔，判斷當前遺漏是否到達最佳回歸時機。</div>`;
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">共統計 ${total} 次回歸事件，顯示次數最高的前 20 個間隔。注意：間隔分佈遞減是獨立開獎下幾何分佈的自然形狀，見下方平坦度檢驗。</div>`;
+    })()}
+  </div>
+
+  <div class="card" style="border-left:4px solid #7c3aed">
+    <h3>📏 回歸機率平坦度檢驗（賭徒謬誤照妖鏡）</h3>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px">檢驗「沉寂越久越該回歸」：沉寂 g 期的號碼，下一期回歸的實際機率。若各深度都貼近理論值 12.8%（虛線），代表回歸機率與沉寂多久無關。</p>
+    ${(()=>{
+      const dist=buildReturnDist(rec);
+      const expP=5/39*100;
+      const rows=[];
+      for(let g=0;g<=14;g++){
+        const atRisk=Object.entries(dist).reduce((a,[k,c])=>a+((+k>=g)?c:0),0);
+        if(atRisk<20) break;
+        const h=(dist[g]||0)/atRisk*100;
+        const se=Math.sqrt(expP/100*(1-expP/100)/atRisk)*100;
+        rows.push({g,atRisk,h,lo:expP-2*se,hi:expP+2*se});
+      }
+      if(rows.length<4) return '<div style="color:var(--muted);font-size:.82rem">資料不足</div>';
+      const outliers=rows.filter(r=>r.h<r.lo||r.h>r.hi).length;
+      const maxH=Math.max(...rows.map(r=>r.h),expP)*1.25;
+      const barH=v=>Math.max(2,v/maxH*90);
+      return `<div style="position:relative;height:112px">
+        <div style="position:absolute;left:0;right:0;bottom:${barH(expP)}px;border-top:2px dashed #dc2626;z-index:2"><span style="position:absolute;right:2px;top:-15px;font-size:.62rem;color:#dc2626;font-weight:700">理論 ${expP.toFixed(1)}%</span></div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:112px">
+        ${rows.map(r=>{
+          const out=r.h<r.lo||r.h>r.hi;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+            <span style="font-size:.56rem;color:${out?'#dc2626':'var(--muted)'}">${r.h.toFixed(0)}</span>
+            <div style="width:72%;background:${out?'#dc2626':'#7c3aed'};opacity:.8;height:${barH(r.h)}px;border-radius:3px 3px 0 0"></div>
+          </div>`;
+        }).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:3px;margin-top:2px">${rows.map(r=>`<div style="flex:1;text-align:center;font-size:.58rem;color:var(--muted)">${r.g}</div>`).join('')}</div>
+      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%）</div>
+      <div style="font-size:.74rem;padding:7px 10px;background:${outliers<=1?'#f0fdf4':'#fef9c3'};border-radius:6px">
+        ${outliers<=1
+          ?`✅ <strong>各沉寂深度的回歸機率均貼近理論值</strong>（${rows.length} 個深度僅 ${outliers} 個超出 ±2σ，屬正常波動）——「沉寂越久越該回歸」在本資料中<strong>不成立</strong>，這是每期獨立開獎的直接證據。號碼不會「記得」自己沉寂多久。`
+          :`⚠️ ${rows.length} 個深度中有 ${outliers} 個超出 ±2σ（紅柱）。深度越深樣本越少、波動越大，多屬隨機起伏，不建議視為可下注的訊號。`}
+      </div>`;
     })()}
   </div>
 
