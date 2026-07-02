@@ -752,7 +752,7 @@ function ck(ok,label){
 }
 
 // ── TABS ───────────────────────────────────────────────────
-let tab='pick', lastReport=null, rptMode=0, rptHistFilter='';
+let tab='pick', lastReport=null, rptMode=0, rptHistFilter='', selectedRptIdx=0;
 
 // ── SORT HELPERS ───────────────────────────────────────────
 const sortState = {};
@@ -813,6 +813,22 @@ function toggleRptDetail(id) {
   if(el) el.style.display = el.style.display==='none'?'table-row':'none';
 }
 
+function buildReportForIdx(idx) {
+  const r = rec[idx];
+  if (!r) return null;
+  const sorted = [...r.n].sort((a,b)=>a-b);
+  const drawn = sorted.map(n => {
+    const abBefore = dormancyBefore(idx, n);
+    const ratio = +(abBefore / (st[n]?.ag || 8)).toFixed(2);
+    return {n, abBefore, ratio};
+  });
+  const zd = {1:0,2:0,3:0,4:0};
+  sorted.forEach(n => zd[Z(n)]++);
+  const repeatNums = rec[idx+1] ? sorted.filter(n => rec[idx+1].n.includes(n)) : [];
+  return {period: r.p, nums: sorted, drawn, zoneDist: zd, repeatNums, idx};
+}
+function showRptDetail(idx) { selectedRptIdx=idx; rptMode=2; render(); }
+
 function renderReportHistory(el) {
   const q = rptHistFilter.trim();
   const qNum = parseInt(q);
@@ -866,6 +882,7 @@ function renderReportHistory(el) {
             <th style="padding:4px 6px;color:${zoneColor[4]}">四</th>
             <th style="text-align:left;padding:7px 8px">開獎號碼</th>
             <th style="padding:4px 6px">特殊</th>
+            <th style="padding:4px 6px"></th>
           </tr>
         </thead>
         <tbody>
@@ -886,9 +903,10 @@ function renderReportHistory(el) {
                 return `<span class="ball ball-sm ${ZC[Z(n)]}" style="${hi}">${f2(n)}</span>`;
               }).join('')}</td>
               <td style="text-align:center;font-size:.85rem;padding:4px 6px">${flags||'—'}</td>
+              <td style="text-align:center;padding:4px 6px"><button onclick="event.stopPropagation();showRptDetail(${p.i})" style="border:none;background:none;cursor:pointer;font-size:.95rem;padding:2px 5px" title="查看快報">📋</button></td>
             </tr>
             <tr id="${did}" style="display:none">
-              <td colspan="7" style="padding:8px 14px 10px;background:#f8fafc">
+              <td colspan="8" style="padding:8px 14px 10px;background:#f8fafc">
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
                   ${p.details.map(x=>{
                     const clr=x.ratio>=2.0?'#9333ea':x.ratio>=1.0?'#d97706':'#64748b';
@@ -908,6 +926,124 @@ function renderReportHistory(el) {
   </div>`;
 }
 
+function renderHistReport(el) {
+  const idx = selectedRptIdx;
+  const R = buildReportForIdx(idx);
+  if (!R) { el.innerHTML = '<div class="empty">資料不足</div>'; return; }
+  const modeBar = `<div style="display:flex;gap:0;margin-bottom:12px;background:#f1f5f9;border-radius:10px;padding:3px">
+    <button onclick="rptMode=0;render()" style="flex:1;border:none;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;background:none;color:var(--muted)">📋 本期快報</button>
+    <button onclick="rptMode=1;render()" style="flex:1;border:none;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;background:none;color:var(--muted)">📚 歷史查詢 (${rec.length}期)</button>
+  </div>`;
+  const navBar = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <button onclick="rptMode=1;render()" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:600;cursor:pointer">← 返回列表</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      ${idx<rec.length-1?`<button onclick="showRptDetail(${idx+1})" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer">← 上一期</button>`:`<button disabled style="border:none;background:#f1f5f9;color:#94a3b8;border-radius:8px;padding:7px 12px;font-size:.82rem">← 上一期</button>`}
+      <span style="font-size:.84rem;font-weight:700;color:var(--primary)">第 ${R.period} 期</span>
+      ${idx>0?`<button onclick="showRptDetail(${idx-1})" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer">下一期 →</button>`:`<button disabled style="border:none;background:#f1f5f9;color:#94a3b8;border-radius:8px;padding:7px 12px;font-size:.82rem">下一期 →</button>`}
+    </div>
+  </div>`;
+  function noteR(d) {
+    if (d.abBefore===0) return '連莊';
+    if (d.ratio>=2.0) return '⭐ 超期回歸';
+    if (d.ratio>=1.0) return '逾期回歸';
+    return '正常回歸';
+  }
+  function odTagR(ratio) {
+    if (ratio>=2.0) return `<span class="tag tag-od">×${ratio}倍</span>`;
+    if (ratio>=1.0) return `<span class="tag tag-warn">×${ratio}倍</span>`;
+    return `<span class="tag tag-gray">×${ratio}倍</span>`;
+  }
+  const zd = R.zoneDist;
+  const logEntry = pickLog.find(l => l.period === R.period);
+  const gKeys = logEntry ? Object.keys(logEntry.strategies || {}) : [];
+  el.innerHTML = modeBar + navBar + `
+  <div class="card">
+    <h3>📋 第 ${R.period} 期 快報</h3>
+    <div class="sec-lbl">本期開出號碼</div>
+    <div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px">${R.nums.map(n=>ball(n)).join('')}</div>
+    <table>
+      <thead><tr><th>號碼</th><th>沉寂期數</th><th>逾期倍數</th><th>區間</th><th>備註</th></tr></thead>
+      <tbody>${R.drawn.map(d=>`<tr>
+        <td>${ball(d.n,'ball-sm')}</td>
+        <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
+        <td>${odTagR(d.ratio)}</td>
+        <td><span class="tag tag-gray">${ZL[Z(d.n)]}</span></td>
+        <td style="font-size:.78rem">${noteR(d)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>📊 本期區間分佈</h3>
+    <div class="zone-grid">
+      ${[1,2,3,4].map(z=>`<div class="zone-box" style="background:var(--z${z}-bg)">
+        <div class="val" style="color:var(--z${z})">${zd[z]}</div>
+        <div class="lbl">${ZL[z]}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+  ${logEntry?`<div class="card">
+    <h3>🎯 本期預測命中</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      ${gKeys.map(k=>{
+        const h=logEntry.hits?.[k]??0;
+        const hn=new Set(logEntry.hitNums?.[k]??(logEntry.strategies?.[k]?.filter(n=>logEntry.result?.includes(n))??[]));
+        const nums=logEntry.strategies?.[k]||[];
+        const clr=h>=3?'#dc2626':h>=2?'#d97706':h>=1?'#16a34a':'#94a3b8';
+        const numStr=nums.map(n=>hn.has(n)?`<b style="color:#16a34a">${f2(n)}</b>`:`<span style="color:#94a3b8;font-size:.85em">${f2(n)}</span>`).join(' ');
+        return `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:110px">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:3px">${k}</div>
+          <div style="font-size:.8rem;margin-bottom:3px">${numStr}</div>
+          <div style="font-weight:700;color:${clr};font-size:.8rem">${h}✓</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`:''}
+  <div class="card">
+    <h3>🔁 本期回歸號碼 — 歷史沉寂統計</h3>
+    <table>
+      <thead><tr><th>號碼</th><th>本次沉寂</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th></tr></thead>
+      <tbody>${R.drawn.map(d=>{
+        const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
+        const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
+        if(!cnt) return `<tr><td>${ball(d.n,'ball-sm')}</td><td>${d.abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
+        return `<tr>
+          <td>${ball(d.n,'ball-sm')}</td>
+          <td style="font-weight:600">${d.abBefore}期</td>
+          <td style="text-align:center">${cnt}次</td>
+          <td style="text-align:center">${+avg.toFixed(1)}期</td>
+          <td style="text-align:center">${Math.min(...allGaps)}期</td>
+          <td style="text-align:center">${Math.max(...allGaps)}期</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>🔗 連莊分析</h3>
+    ${R.repeatNums&&R.repeatNums.length>0
+      ?`<div class="alert alert-ok" style="margin-bottom:10px">✅ 本期連莊號碼（與上期重複）：${R.repeatNums.map(n=>ball(n,'ball-sm')).join('')}</div>`
+      :`<div class="alert alert-blue" style="margin-bottom:10px">本期無連莊號碼</div>`}
+    <div class="sec-lbl">本期${R.nums.length}碼歷史連莊傾向</div>
+    <table>
+      <thead><tr><th>號碼</th><th>歷史出現</th><th>連莊次數</th><th>連莊率</th><th>最常伴隨下一期出現</th></tr></thead>
+      <tbody>${R.nums.map(n=>{
+        const cs=conStat[n];
+        if(!cs||cs.total===0) return `<tr><td>${ball(n,'ball-sm')}</td><td colspan="4" style="color:var(--muted);font-size:.78rem">累積中</td></tr>`;
+        const rate=+(cs.repeats/cs.total*100).toFixed(0);
+        const rateClr=rate>=20?'#dc2626':rate>=13?'var(--warn)':'var(--muted)';
+        const topF=Object.entries(cs.followedBy).sort((a,b)=>b[1]-a[1]).slice(0,3);
+        return `<tr>
+          <td>${ball(n,'ball-sm')}</td>
+          <td style="text-align:center">${cs.total}</td>
+          <td style="text-align:center">${cs.repeats}</td>
+          <td style="text-align:center;font-weight:700;color:${rateClr}">${rate}%</td>
+          <td style="font-size:.78rem">${topF.map(([m,c])=>`${ball(+m,'ball-sm')}<span style="font-size:.67rem;color:var(--muted)">${c}次</span>`).join(' ')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:6px">理論連莊率 ≈ 12.8%；≥20% 為高連莊傾向號碼</div>
+  </div>`;
+}
+
 function renderReport(el){
   const modeBar = `<div style="display:flex;gap:0;margin-bottom:12px;background:#f1f5f9;border-radius:10px;padding:3px">
     <button onclick="rptMode=0;render()" style="flex:1;border:none;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;${rptMode===0?'background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.12)':'background:none;color:var(--muted)'}">📋 本期快報</button>
@@ -917,6 +1053,11 @@ function renderReport(el){
   if(rptMode===1){
     el.innerHTML = modeBar;
     renderReportHistory(el);
+    return;
+  }
+
+  if(rptMode===2){
+    renderHistReport(el);
     return;
   }
 
