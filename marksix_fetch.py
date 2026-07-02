@@ -24,7 +24,7 @@ except ImportError:
     print("❌ 請先安裝：pip3 install requests")
     sys.exit(1)
 
-INDEX_HTML = Path(__file__).parent / "marksix.html"
+DATA_FILE = Path(__file__).parent / "data_m6.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
@@ -379,7 +379,7 @@ def write_pick_state(html, picklog, pending):
 
 # ── 更新 marksix.html ─────────────────────────────────────────
 def update_html(new_draws: list, dry_run: bool = False):
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
 
     actually_new = sorted([d for d in new_draws if d['p'] > current_latest],
@@ -471,16 +471,16 @@ def update_html(new_draws: list, dry_run: bool = False):
         print(f"\n[Dry Run] 將更新至 {newest_draw}（{newest_dt}），共{total}期，不寫入")
         return
 
-    INDEX_HTML.write_text(html, encoding="utf-8")
+    DATA_FILE.write_text(html, encoding="utf-8")
     print(f"\n✅ 已更新 → {newest_draw}（{newest_dt}），共 {total} 期（{today}）")
 
     # ── Git commit + push ─────────────────────────────────────
-    repo = INDEX_HTML.parent
+    repo = DATA_FILE.parent
     new_info = "、".join(
         f"{d['draw']}({d['dt']})[{','.join(f'{n:02d}' for n in d['n'])},特{d['e']:02d}]"
         for d in actually_new)
     try:
-        subprocess.run(["git", "add", "marksix.html"], cwd=repo, check=True)
+        subprocess.run(["git", "add", "data_m6.js"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-m", f"六合彩 {new_info}"], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "push"], cwd=repo, check=True, capture_output=True)
         print("→ 已推上 GitHub（約1分鐘後生效）")
@@ -494,7 +494,7 @@ def main():
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
     args = parser.parse_args()
 
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
     print(f"目前最新：{current_latest}（{current_latest//1000:02d}/{current_latest%1000:03d}）")
     print("抓取中...")

@@ -24,7 +24,7 @@ except ImportError:
     print("❌ 請先安裝：pip3 install requests")
     sys.exit(1)
 
-INDEX_HTML = Path(__file__).parent / "fantasy5.html"
+DATA_FILE = Path(__file__).parent / "data_f5.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
@@ -440,7 +440,7 @@ def write_pick_state(html: str, picklog: list, pending) -> str:
 
 # ── 更新 fantasy5.html ────────────────────────────────────────
 def update_html(new_draws: list, dry_run: bool = False):
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
 
     actually_new = sorted(
@@ -549,18 +549,18 @@ def update_html(new_draws: list, dry_run: bool = False):
         print(f"\n[Dry Run] 將更新至 Draw {newest}（{newest_dt}），共 {total} 期，不寫入")
         return
 
-    INDEX_HTML.write_text(html, encoding="utf-8")
+    DATA_FILE.write_text(html, encoding="utf-8")
     print(f"\n✅ 已更新 → Draw {newest}（{newest_dt}），共 {total} 期（{today}）")
 
     # ── Git commit + push ─────────────────────────────────────
-    repo = INDEX_HTML.parent
+    repo = DATA_FILE.parent
     new_info = ", ".join(
         f"Draw{d['p']}({d['dt']})({','.join(f'{n:02d}' for n in d['n'])})"
         for d in actually_new
     )
     msg = f"F5 新增 {new_info}"
     try:
-        subprocess.run(["git", "add", "fantasy5.html"], cwd=repo, check=True)
+        subprocess.run(["git", "add", "data_f5.js"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "push"], cwd=repo, check=True, capture_output=True)
         print("→ 已推上 GitHub（約1分鐘後生效）")
@@ -574,7 +574,7 @@ def main():
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
     args = parser.parse_args()
 
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
     latest_date = draw_to_date(current_latest)
     print(f"目前最新：Draw {current_latest}（{latest_date}）")

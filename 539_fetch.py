@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-539_fetch.py — 自動抓取今彩539最新開獎，更新 index.html
+539_fetch.py — 自動抓取今彩539最新開獎，更新 data_539.js
+
+資料源：台灣彩券官方 API（主）→ pilio.idv.tw（備援）
 
 用法：
   python3 539_fetch.py          # 抓取並更新
@@ -25,10 +27,11 @@ except ImportError:
     print("❌ 請先安裝：pip3 install requests beautifulsoup4")
     sys.exit(1)
 
-INDEX_HTML = Path(__file__).parent / "index.html"
+DATA_FILE = Path(__file__).parent / "data_539.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
+API_URL = "https://api.taiwanlottery.com/TLCAPIWEB/Lottery/Daily539Result"
 
 # 已知錨點：第 115149 期 = 2026-06-19
 ANCHOR_PERIOD = 115149
@@ -77,26 +80,65 @@ def read_current_latest(html: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-# ── 抓取 pilio.idv.tw 開獎資料 ───────────────────────────────
-def fetch_draws(from_period: int) -> list:
-    url = "https://www.pilio.idv.tw/lto539/list.asp"
-    try:
+# ── 抓取開獎資料：台灣彩券官方 API（主源）────────────────────
+def official_to_period(op: int) -> int:
+    """官方期號 115000160 → 內部期號 115160（民國年115 × 1000 + 當年期序160）"""
+    return (op // 1000000) * 1000 + op % 1000
+
+def fetch_draws_api(from_period: int) -> list:
+    """從官方 API 抓新開獎，期號直接取自官方（不靠日期推算），必要時回溯前幾個月補漏"""
+    draws = []
+    covered = False   # 是否已看到 from_period（含）以前的期數 → 代表銜接無缺漏
+    d = date.today().replace(day=1)
+    for _ in range(3):
+        url = f"{API_URL}?period&month={d.year}-{d.month:02d}"
         r = requests.get(url, headers=HEADERS, timeout=20)
         r.raise_for_status()
-    except requests.RequestException as e:
-        print(f"❌ 抓取失敗：{e}")
-        return []
+        items = (r.json().get("content") or {}).get("daily539Res") or []
+        for it in items:
+            p = official_to_period(it["period"])
+            if p <= from_period:
+                covered = True
+                continue
+            nums = sorted(it["drawNumberSize"])
+            if len(nums) != 5 or not all(1 <= n <= 39 for n in nums):
+                print(f"⚠️ 期號 {p} 號碼異常，跳過：{nums}")
+                continue
+            draws.append({"p": p, "n": nums})
+        if covered:
+            break
+        d = (d - timedelta(days=1)).replace(day=1)
+
+    draws.sort(key=lambda x: x["p"], reverse=True)
+    if draws and not covered:
+        # 同年度期號應與現有資料連號；跨年（前綴不同）無法檢查
+        oldest_new = draws[-1]["p"]
+        if oldest_new // 1000 == from_period // 1000 and oldest_new != from_period + 1:
+            msg = f"期號不連續：現有最新{from_period}，抓到最舊{oldest_new}，中間缺漏，已中止寫入"
+            print(f"❌ {msg}")
+            subprocess.run(['osascript', '-e',
+                f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'],
+                capture_output=True)
+            return []
+    if draws:
+        print(f"✅ 官方 API 找到 {len(draws)} 筆新資料")
+    return draws
+
+
+# ── 抓取開獎資料：pilio.idv.tw（備援）────────────────────────
+def fetch_draws_pilio(from_period: int) -> list:
+    url = "https://www.pilio.idv.tw/lto539/list.asp"
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    r.raise_for_status()
 
     html = r.text
-    pattern = r'date-cell[^>]*>(\d{2}/\d{2})<br>\d+(.*?number-cell.*?)([\d,\s&nbsp;]+)</td>'
+    # date-cell 格式：07/02<br>26(四) → 26 = 西元 2026 年縮寫
+    pattern = r'date-cell[^>]*>(\d{2})/(\d{2})<br>(\d{2})\((.*?number-cell.*?)([\d,\s&nbsp;]+)</td>'
     rows = re.findall(pattern, html, re.DOTALL)
 
     draws = []
-    current_year = ANCHOR_DATE.year
-
-    for date_str, _, nums_raw in rows:
-        month, day = map(int, date_str.split("/"))
-        d = date(current_year, month, day)
+    for month, day, yy, _, nums_raw in rows:
+        d = date(2000 + int(yy), int(month), int(day))
         period = date_to_period(d)
         if period <= from_period:
             continue
@@ -105,8 +147,20 @@ def fetch_draws(from_period: int) -> list:
             draws.append({"p": period, "n": sorted(nums)})
 
     if draws:
-        print(f"✅ 找到 {len(draws)} 筆新資料")
+        print(f"✅ pilio 備援找到 {len(draws)} 筆新資料（期號由日期推算，請留意停開日）")
     return sorted(draws, key=lambda x: x["p"], reverse=True)
+
+
+def fetch_draws(from_period: int) -> list:
+    try:
+        return fetch_draws_api(from_period)
+    except Exception as e:
+        print(f"⚠️ 官方 API 失敗（{e}），改用 pilio 備援")
+    try:
+        return fetch_draws_pilio(from_period)
+    except Exception as e:
+        print(f"❌ 抓取失敗：{e}")
+        return []
 
 
 # ── 計算各號碼沉寂期數 ────────────────────────────────────────
@@ -464,9 +518,9 @@ def write_pick_state(html: str, picklog: list, pending) -> str:
     return html
 
 
-# ── 更新 index.html ───────────────────────────────────────────
+# ── 更新 data_539.js ───────────────────────────────────────────
 def update_html(new_draws: list, dry_run: bool = False):
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
 
     actually_new = sorted(
@@ -579,19 +633,19 @@ def update_html(new_draws: list, dry_run: bool = False):
         print(f"\n[Dry Run] 將更新至第 {newest} 期，共 {total} 期，不寫入")
         return
 
-    INDEX_HTML.write_text(html, encoding="utf-8")
+    DATA_FILE.write_text(html, encoding="utf-8")
     print(f"\n✅ 已更新 → 第 {newest} 期，共 {total} 期（{today}）")
     print("→ 沉寂期數 ab 已重新計算")
 
     # ── Git commit + push ──────────────────────────────────────
-    repo = INDEX_HTML.parent
+    repo = DATA_FILE.parent
     new_periods = ", ".join(
         f"{d['p']}期({'，'.join(f'{n:02d}' for n in d['n'])})"
         for d in actually_new
     )
     msg = f"新增 {new_periods}"
     try:
-        subprocess.run(["git", "add", "index.html"], cwd=repo, check=True)
+        subprocess.run(["git", "add", "data_539.js"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "push"], cwd=repo, check=True, capture_output=True)
         print(f"→ 已推上 GitHub（約1分鐘後手機頁面生效）")
@@ -605,7 +659,7 @@ def main():
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
     args = parser.parse_args()
 
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
     latest_date = period_to_date(current_latest)
     print(f"目前最新：第 {current_latest} 期（{latest_date}）")
