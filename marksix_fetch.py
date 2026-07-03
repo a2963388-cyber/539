@@ -327,6 +327,36 @@ def lcg_picks(seed, num_max, k):
         picks.add(1 + x % num_max)
     return sorted(picks)
 
+def avg_gap_per_num(records):
+    """每號碼的歷史平均回歸間隔（無紀錄者用理論值 49/6）"""
+    tot, cnt, last = {}, {}, {}
+    for i, r in enumerate(reversed(records)):
+        for n in r['n']:
+            if n in last:
+                tot[n] = tot.get(n, 0) + (i - last[n] - 1)
+                cnt[n] = cnt.get(n, 0) + 1
+            last[n] = i
+    return {n: (tot.get(n, 0) / cnt[n] if cnt.get(n) else 49 / 6) for n in range(1, 50)}
+
+def gen_g10(records, annual):
+    """G10 使用者策略：4碼回歸熱區（間隔占比>11%）+ 2碼超期（沉寂≥2×個別平均間隔）"""
+    dist = build_return_dist(records)
+    total = sum(dist.values()) or 1
+    hot_gaps = {g for g, c in dist.items() if c / total > 0.11}
+    ab = calc_absent(records)
+    ag = avg_gap_per_num(records)
+    dual_fn, _ = _build_dual(list(range(1, 50)), records, annual)
+    pool_a = sorted([n for n in range(1, 50) if ab[n] in hot_gaps], key=dual_fn, reverse=True)
+    pool_b = sorted([n for n in range(1, 50) if ab[n] >= 2 * ag[n]], key=dual_fn, reverse=True)
+    picks = pool_a[:4]
+    for src_pool in (pool_b, pool_a[4:], sorted(range(1, 50), key=dual_fn, reverse=True)):
+        for n in src_pool:
+            if len(picks) >= 6:
+                break
+            if n not in picks:
+                picks.append(n)
+    return sorted(picks[:6])
+
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual: return {}
@@ -344,6 +374,7 @@ def gen_all_predictions(records, st_mg):
     g8 = gen_g8(cand, records, annual)
     if g8: strategies['G8'] = g8
     strategies['G9'] = gen_g9(records, annual)
+    strategies['G10'] = gen_g10(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
     strategies['G0'] = lcg_picks(records[0]['p'], 49, 6)
     return strategies
