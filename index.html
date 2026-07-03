@@ -528,6 +528,37 @@ function lcgPicks(seed, numMax, k){
 }
 function genG0(){ return rec[0] ? lcgPicks(rec[0].p, 39, 5) : null; }
 
+// ── 方案C輪盤：15碼「3 if 5」保證覆蓋設計（16注）─────────────
+// 保證：5 個獎號全落在 15 碼池內時，至少一張中 3 碼（貪婪覆蓋+剪枝驗證）
+const WHEEL15 = [[1,2,3,4,6],[5,7,8,9,10],[11,12,13,14,15],[1,2,5,7,11],[3,4,8,9,12],[6,10,13,14,15],[1,2,8,13,14],[3,4,5,7,15],[3,6,9,10,11],[1,2,4,10,12],[5,6,7,9,12],[4,6,8,11,15],[1,2,9,13,14],[3,5,7,13,14],[1,4,5,7,11],[1,2,3,8,12]];
+function wheelSuggest(){
+  const {g1,g3,g5,g6,g8,g9}=allGroups();
+  const cnt={};
+  [g1,g3,g5,g6,g8,g9].filter(Boolean).forEach(g=>g.nums.forEach(n=>cnt[n]=(cnt[n]||0)+1));
+  const all=Array.from({length:39},(_,i)=>i+1);
+  const {dualFn}=buildDual(all);
+  return all.sort((a,b)=>(cnt[b]||0)-(cnt[a]||0)||dualFn(b)-dualFn(a)).slice(0,15).sort((a,b)=>a-b);
+}
+function buildWheel(){
+  const out=document.getElementById('wheel-out');
+  if(!out) return;
+  const raw=document.getElementById('wheel-in').value;
+  const nums=[...new Set((raw.match(/\d+/g)||[]).map(Number).filter(n=>n>=1&&n<=39))];
+  if(nums.length!==15){out.innerHTML=`<div style="color:#dc2626;font-size:.8rem;padding:4px 0">需要恰好 15 個 1–39 的不重複號碼（目前 ${nums.length} 個）</div>`;return;}
+  nums.sort((a,b)=>a-b);
+  lsSet('539wheelPool', JSON.stringify(nums));
+  const tickets=WHEEL15.map(t=>t.map(i=>nums[i-1]).sort((a,b)=>a-b));
+  window._wheelTxt=tickets.map((t,i)=>`${String(i+1).padStart(2,'0')}. ${t.map(f2).join(' ')}`).join('\n');
+  out.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:5px;margin:8px 0">
+      ${tickets.map((t,i)=>`<div style="display:flex;align-items:center;gap:3px;background:#f8fafc;border-radius:7px;padding:4px 7px"><span style="font-size:.66rem;color:var(--muted);width:18px;text-align:right">${i+1}</span>${t.map(n=>ball(n,'ball-sm')).join('')}</div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button onclick="navigator.clipboard.writeText(window._wheelTxt).then(()=>alert('已複製 16 注投注單'))" class="btn" style="font-size:.78rem;padding:6px 14px">📋 複製投注單</button>
+      <span style="font-size:.72rem;color:var(--muted)">16 注 × 50 元 = 800 元/期</span>
+    </div>`;
+}
+
 function allGroups() {
   const cand=candidates();
   return {cand, g1:genG1(cand), g3:genG3(cand), g5:genG5(cand), g6:genG6(cand), g8:genG8(cand), g9:genG9()};
@@ -1224,6 +1255,24 @@ function renderPick(el){
     </div>`;
   })()}
 
+  ${(()=>{
+    let init;
+    try{ const sv=lsGet('539wheelPool'); init=sv?JSON.parse(sv):wheelSuggest(); }catch(e){ init=wheelSuggest(); }
+    return `<div class="card" style="border-left:4px solid #d97706">
+      <h3>🎡 方案C輪盤：15碼「3 if 5」保證（16注/800元）</h3>
+      <div style="font-size:.76rem;color:var(--muted);margin-bottom:7px">
+        輸入你的 15 個號碼（空格或逗號分隔）。<strong>保證</strong>：當 5 個獎號全落在這 15 碼內（機率 0.52%），至少一張中 3 碼，實際上此時多半會中複數張。
+        誠實提醒：期望值與任何買法相同（每注 −44.2%），輪盤只優化中獎「分佈」，不改變期望。
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+        <input id="wheel-in" type="text" value="${init.map(f2).join(' ')}" style="flex:1;min-width:250px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:.85rem;font-family:monospace">
+        <button onclick="buildWheel()" class="btn" style="font-size:.8rem;padding:7px 14px">產生 16 注</button>
+        <button onclick="document.getElementById('wheel-in').value=wheelSuggest().map(f2).join(' ');buildWheel()" class="btn btn-gray" style="font-size:.8rem;padding:7px 12px">🎯 用本期策略池自動填</button>
+      </div>
+      <div id="wheel-out"></div>
+    </div>`;
+  })()}
+
   <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
     <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上6組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
@@ -1231,6 +1280,7 @@ function renderPick(el){
     ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定6組（含回歸熱區G9），等待下期開獎結果</div>`:''}
     <div style="margin-top:8px"><button onclick="go('track')" style="border:none;background:none;color:var(--primary);font-size:.8rem;cursor:pointer;text-decoration:underline">查看中獎追蹤 →</button></div>
   </div>`;
+  if(document.getElementById('wheel-in')) buildWheel();
 }
 
 // ── RENDER: ANNUAL ─────────────────────────────────────────
