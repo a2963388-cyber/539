@@ -1867,7 +1867,7 @@ function renderTrack(el) {
     `<div style="color:var(--muted);font-size:.83rem;text-align:center;padding:20px">尚無紀錄。<br>在選號頁鎖定預測並輸入開獎號碼後，命中結果將在此顯示。</div>` :
     `<div style="overflow-x:auto">
     <table>
-      <thead><tr><th>期號</th><th>開獎號碼</th>${activeKeys.map(k=>`<th>${k}</th>`).join('')}<th>最佳</th></tr></thead>
+      <thead><tr><th>期號</th><th>開獎號碼</th>${activeKeys.map(k=>`<th style="white-space:nowrap">${k}<div style="font-weight:400;font-size:.66rem;color:var(--muted)">${gNames[k].replace('(停)','')}</div></th>`).join('')}<th>最佳</th></tr></thead>
       <tbody>${pickLog.map(l => {
         const maxH = l.hits ? Math.max(...Object.values(l.hits), 0) : 0;
         const bestG = l.hits ? (Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0] : '';
