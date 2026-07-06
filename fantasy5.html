@@ -1024,6 +1024,93 @@ function observation(R,w9,sOD){
 }
 
 // ── RENDER: PICK ───────────────────────────────────────────
+// ── 💼 固定投資盤：回歸前2名＋逾期（不含超期）＋動態3中保證輪盤 ──
+const FX_MAX=39, FX_PICK=5;
+const fxCost = t => `${t} 注 × $1 = $${t}/期`;
+function fixedPool(){
+  const dist=buildReturnDist(rec);
+  const topGaps=Object.entries(dist).sort((a,b)=>b[1]-a[1]||(+a[0])-(+b[0])).slice(0,2).map(e=>+e[0]);
+  const ret=[],over=[];
+  for(let n=1;n<=FX_MAX;n++){
+    const s=st[n]; if(!s||!s.ag) continue;
+    const r=s.ab/s.ag;
+    if(r>=2) continue;                       // 超期（≥2×平均間隔）排除
+    if(topGaps.includes(s.ab)) ret.push(n);  // 沉寂期數命中回歸排名前2間隔
+    else if(r>=1) over.push(n);              // 逾期（1×–2×平均間隔）
+  }
+  return {topGaps,ret,over,pool:[...ret,...over].sort((a,b)=>a-b)};
+}
+function fxComb(n,k){ if(k<0||k>n) return 0; let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return Math.round(r); }
+function fxPop(x){ x=x-((x>>1)&0x55555555); x=(x&0x33333333)+((x>>2)&0x33333333); return (((x+(x>>4))&0x0f0f0f0f)*0x01010101)>>24; }
+function fixedWheelGen(pool){
+  const N=pool.length, K=FX_PICK;
+  if(N<K) return {err:`池只有 ${N} 碼，至少需要 ${K} 碼才能投注`};
+  if(N<=K+1) return {tickets:[pool.slice(0,K)],verified:true,combos:fxComb(N,K)};
+  if(N>31) return {err:`池有 ${N} 碼，超過動態輪盤上限 31 碼（等池縮小或改用其他打法）`};
+  const total=fxComb(N,K);
+  if(total>300000) return {err:`池 ${N} 碼的開獎組合數 ${total.toLocaleString()} 過大，瀏覽器無法即時演算`};
+  const combos=new Int32Array(total);
+  { const idx=Array.from({length:K},(_,i)=>i); let ptr=0;
+    while(true){
+      let m=0; for(const i of idx) m|=1<<i;
+      combos[ptr++]=m;
+      let i=K-1;
+      while(i>=0&&idx[i]===N-K+i) i--;
+      if(i<0) break;
+      idx[i]++; for(let j=i+1;j<K;j++) idx[j]=idx[j-1]+1;
+    } }
+  const covered=new Uint8Array(total);
+  let unc=total;
+  const tickets=[];
+  let seed=((rec[0]?.p||1)>>>0)%2147483647; pool.forEach(n=>seed=(seed*31+n)%2147483647); if(seed<=0) seed=1;
+  const rnd=()=>((seed=seed*48271%2147483647)-1)/2147483646;
+  while(unc>0){
+    const sampU=[];
+    if(unc<=3000){ for(let i=0;i<total;i++) if(!covered[i]) sampU.push(i); }
+    else { let tries=0; while(sampU.length<2500&&tries<25000){ const i=(rnd()*total)|0; if(!covered[i]) sampU.push(i); tries++; }
+      if(!sampU.length){ for(let i=0;i<total&&sampU.length<2500;i++) if(!covered[i]) sampU.push(i); } }
+    const nc=Math.min(600,sampU.length), cands=[];
+    for(let c=0;c<nc;c++) cands.push(combos[sampU[(rnd()*sampU.length)|0]]);
+    let best=cands[0],bestScore=-1;
+    for(const t of cands){ let s=0; for(const i of sampU){ if(fxPop(t&combos[i])>=3) s++; } if(s>bestScore){bestScore=s;best=t;} }
+    tickets.push(best);
+    for(let i=0;i<total;i++){ if(!covered[i]&&fxPop(best&combos[i])>=3){covered[i]=1;unc--;} }
+  }
+  // 剪枝：移除多餘票（覆蓋計數法）
+  const cnt=new Uint8Array(total);
+  for(const t of tickets) for(let i=0;i<total;i++){ if(fxPop(t&combos[i])>=3&&cnt[i]<255) cnt[i]++; }
+  for(let k=tickets.length-1;k>=0;k--){
+    const t=tickets[k]; let removable=true;
+    for(let i=0;i<total;i++){ if(fxPop(t&combos[i])>=3&&cnt[i]<2){removable=false;break;} }
+    if(removable){ for(let i=0;i<total;i++){ if(fxPop(t&combos[i])>=3) cnt[i]--; } tickets.splice(k,1); }
+  }
+  // 窮舉驗證：每一種可能開獎組合都至少被一注覆蓋 ≥3 碼
+  let verified=true;
+  for(let i=0;i<total;i++){ let ok=false; for(const t of tickets){ if(fxPop(t&combos[i])>=3){ok=true;break;} } if(!ok){verified=false;break;} }
+  const asNums=tickets.map(m=>{ const a=[]; for(let i=0;i<N;i++) if(m&(1<<i)) a.push(pool[i]); return a; });
+  return {tickets:asNums,verified,combos:total};
+}
+function buildFixedWheel(){
+  const out=document.getElementById('fx-out'); if(!out) return;
+  out.innerHTML='<div style="font-size:.8rem;color:var(--muted);padding:6px 0">⏳ 貪婪覆蓋演算＋窮舉驗證中…</div>';
+  setTimeout(()=>{
+    const fp=fixedPool();
+    const r=fixedWheelGen(fp.pool);
+    if(r.err){ out.innerHTML=`<div style="color:#dc2626;font-size:.8rem;padding:4px 0">⚠️ ${r.err}</div>`; return; }
+    const tickets=r.tickets;
+    window._fxTxt=tickets.map((t,i)=>`${String(i+1).padStart(2,'0')}. ${t.map(f2).join(' ')}`).join(String.fromCharCode(10));
+    out.innerHTML=`
+      <div style="font-size:.75rem;margin:6px 0;color:${r.verified?'#16a34a':'#dc2626'};font-weight:700">${r.verified?`✅ 已窮舉驗證 ${r.combos.toLocaleString()} 種池內開獎組合全覆蓋（全進池必中 ≥3 碼）`:'❌ 驗證未通過，請再按一次重新產生'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:5px;margin:8px 0">
+        ${tickets.map((t,i)=>`<div style="display:flex;align-items:center;gap:3px;background:#f8fafc;border-radius:7px;padding:4px 7px"><span style="font-size:.66rem;color:var(--muted);width:18px;text-align:right">${i+1}</span>${t.map(n=>ball(n,'ball-sm')).join('')}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button onclick="navigator.clipboard.writeText(window._fxTxt).then(()=>alert('已複製 ${tickets.length} 注投注單'))" class="btn" style="font-size:.78rem;padding:6px 14px">📋 複製投注單</button>
+        <span style="font-size:.72rem;color:var(--muted)">${fxCost(tickets.length)}</span>
+      </div>`;
+  },30);
+}
+
 function renderPick(el){
   const {cand,g2,g4,g5,g9,g10}=allGroups();
   const ex=excluded();
@@ -1193,6 +1280,26 @@ function renderPick(el){
       </div>
       <div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
       ${g0?`<div style="font-size:.74rem;padding:6px 9px;background:#f8fafc;border-radius:6px">🎲 <strong>G0 隨機對照組</strong>（每期自動鎖定，僅作基準不建議下注）：${g0.map(f2).join(' ')}<span style="color:var(--muted);margin-left:6px">若 G0 長期表現與各策略無異，即為「無預測力」的直接證據</span></div>`:''}
+    </div>`;
+  })()}
+
+  ${(()=>{
+    const fp=fixedPool();
+    const N=fp.pool.length;
+    const pAll=N>=FX_PICK?fxComb(N,FX_PICK)/fxComb(FX_MAX,FX_PICK)*100:0;
+    return `<div class="card" style="border-left:4px solid #7c3aed">
+      <h3>💼 固定投資盤：回歸前2名＋逾期（不含超期）</h3>
+      <div style="font-size:.76rem;color:var(--muted);margin-bottom:7px">
+        每期固定玩法：號碼池 =「沉寂期數命中回歸排名前2間隔（本期為 <strong>${fp.topGaps.join('、')} 期</strong>）」的號碼 ＋ 逾期號碼（沉寂達個別平均間隔 1×–2×）；超期（≥2×）一律不進池。池子每期隨開獎自動更新，玩法固定、號碼自動輪替。
+      </div>
+      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">🔁 回歸前2（${fp.ret.length}碼）：</span>${fp.ret.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
+      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">⏰ 逾期 1×–2×（${fp.over.length}碼）：</span>${fp.over.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
+      <div style="font-size:.74rem;margin:6px 0;padding:6px 9px;background:#f8fafc;border-radius:6px">
+        本期池 <strong>${N}</strong> 碼｜5 個獎號全進池機率 <strong>${pAll.toFixed(2)}%</strong>（全進池時保證至少一注中 3 碼；未全進池則無保證，是常態）
+      </div>
+      <button onclick="buildFixedWheel()" class="btn" style="font-size:.8rem;padding:7px 14px">🎡 產生本期保證投注單（動態演算＋窮舉驗證）</button>
+      <div id="fx-out"></div>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">誠實提醒：Fantasy 5 為彩池均分制，期望值約 −50% 且不因選法改變；此盤固定的是「選池規則」，優化的是中獎分佈，不改變期望值。</div>
     </div>`;
   })()}
 
