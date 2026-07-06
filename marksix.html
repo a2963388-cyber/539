@@ -1145,8 +1145,8 @@ function fixedPool(){
     const s=st[n]; if(!s||!s.ag) continue;
     const r=s.ab/s.ag;
     if(r>=2) continue;                       // 超期（≥2×平均間隔）排除
-    if(topGaps.includes(s.ab)) ret.push(n);  // 沉寂期數命中回歸排名前2間隔
-    else if(r>=1) over.push(n);              // 逾期（1×–2×平均間隔）
+    if(topGaps.includes(s.ab)) ret.push(n);        // 沉寂期數命中回歸排名前2間隔
+    else if(s.ab>=7&&s.ab<=9) over.push(n);        // 逾期（沉寂 7–9 期）
   }
   return {topGaps,ret,over,pool:[...ret,...over].sort((a,b)=>a-b)};
 }
@@ -1500,10 +1500,10 @@ function renderPick(el){
     return `<div class="card" style="border-left:4px solid #7c3aed">
       <h3>💼 固定投資盤：回歸前2名＋逾期（不含超期）</h3>
       <div style="font-size:.76rem;color:var(--muted);margin-bottom:7px">
-        每期固定玩法：號碼池 =「沉寂期數命中回歸排名前2間隔（本期為 <strong>${fp.topGaps.join('、')} 期</strong>）」的號碼 ＋ 逾期號碼（沉寂達個別平均間隔 1×–2×）；超期（≥2×）一律不進池。池子每期隨開獎自動更新，玩法固定、號碼自動輪替。
+        每期固定玩法：號碼池 =「沉寂期數命中回歸排名前2間隔（本期為 <strong>${fp.topGaps.join('、')} 期</strong>）」的號碼 ＋ 逾期號碼（沉寂 7–9 期）；超期（沉寂 ≥2× 個別平均間隔）一律不進池。池子每期隨開獎自動更新，玩法固定、號碼自動輪替。
       </div>
       <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">🔁 回歸前2（${fp.ret.length}碼）：</span>${fp.ret.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
-      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">⏰ 逾期 1×–2×（${fp.over.length}碼）：</span>${fp.over.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
+      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">⏰ 逾期 7–9 期（${fp.over.length}碼）：</span>${fp.over.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
       <div style="font-size:.74rem;margin:6px 0;padding:6px 9px;background:#f8fafc;border-radius:6px">
         本期池 <strong>${N}</strong> 碼｜6 個主號全進池機率 <strong>${pAll.toFixed(3)}%</strong>（全進池時保證至少一注中 3 主號；未全進池則無保證，是常態。特別號不計入此保證）
       </div>
