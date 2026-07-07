@@ -1028,9 +1028,9 @@ function observation(R,w9,sOD){
 const FX_MAX=39, FX_PICK=5;
 const fxCost = t => `${t} 注 × $1 = $${t}/期`;
 const FX_MODES=[
-  {id:'eco',name:'💰 節約盤',k:2,lo:7,hi:9,excl:true, note:'153期回測發動率 0.65%（約每 150 期一次）｜池最小、每期成本最低（約 5 注）'},
-  {id:'bal',name:'⚖️ 平衡盤',k:3,lo:5,hi:9,excl:false,note:'153期回測發動率 8.5%（約每 12 期一次）｜池約 23 碼（約 $86/期）'},
-  {id:'max',name:'🚀 衝發動率盤',k:5,lo:6,hi:9,excl:false,note:'153期回測發動率 11.1%（約每 9 期一次）｜池約 25 碼（約 $110/期）'}];
+  {id:'eco',name:'💰 節約盤',k:2,lo:7,hi:9,excl:true, tag:'池最小、每期成本最低（使用者原始規則）'},
+  {id:'bal',name:'⚖️ 平衡盤',k:3,lo:5,hi:9,excl:false,tag:'池中等、發動率與成本折衷'},
+  {id:'max',name:'🚀 衝發動率盤',k:5,lo:6,hi:9,excl:false,tag:'池最大、發動最頻繁但成本最高'}];
 function fxMode(){ const id=lsGet('f5fxMode'); return FX_MODES.find(m=>m.id===id)||FX_MODES[0]; }
 function setFxMode(id){ lsSet('f5fxMode',id); render(); }
 function fixedPool(){
@@ -1045,6 +1045,46 @@ function fixedPool(){
     else if(s.ab>=m.lo&&s.ab<=m.hi) over.push(n);  // 逾期區間
   }
   return {mode:m,topGaps,ret,over,pool:[...ret,...over].sort((a,b)=>a-b)};
+}
+// 三檔模式的歷史發動率即時回測（out-of-sample：每期只用該期之前的紀錄建池），記憶化避免重算
+let FX_BT=null;
+function fxBacktest(){
+  if(FX_BT&&FX_BT.n===rec.length) return FX_BT;
+  const MINH=60, chron=[...rec].reverse();  // 舊→新
+  const res={}; FX_MODES.forEach(m=>res[m.id]={hit:0,tested:0,poolSum:0});
+  const dist={}, last={}, tot={}, cnt={};
+  for(let t=0;t<chron.length;t++){
+    if(t>=MINH){
+      const gapsSorted=Object.entries(dist).sort((a,b)=>b[1]-a[1]||(+a[0])-(+b[0]));
+      for(const m of FX_MODES){
+        const topGaps=gapsSorted.slice(0,m.k).map(e=>+e[0]);
+        const pool=new Set();
+        for(let n=1;n<=FX_MAX;n++){
+          if(last[n]===undefined||!cnt[n]) continue;
+          const ag=tot[n]/cnt[n]; if(!ag) continue;
+          const ab=t-last[n]-1;
+          if(m.excl&&ab/ag>=2) continue;
+          if(topGaps.includes(ab)) pool.add(n);
+          else if(ab>=m.lo&&ab<=m.hi) pool.add(n);
+        }
+        const r=res[m.id]; r.tested++; r.poolSum+=pool.size;
+        if(chron[t].n.every(x=>pool.has(x))) r.hit++;
+      }
+    }
+    for(const n of chron[t].n){
+      if(last[n]!==undefined){ const g=t-last[n]-1; dist[g]=(dist[g]||0)+1; tot[n]=(tot[n]||0)+g; cnt[n]=(cnt[n]||0)+1; }
+      last[n]=t;
+    }
+  }
+  FX_BT={n:rec.length,res};
+  return FX_BT;
+}
+function fxNote(m){
+  const r=fxBacktest().res[m.id];
+  if(!r||!r.tested) return m.tag+'｜歷史資料不足，暫無回測';
+  const pct=r.hit/r.tested*100;
+  const rate=r.hit>0?`${pct.toFixed(pct<1?2:1)}%（約每 ${Math.round(r.tested/r.hit)} 期一次）`:'0%（回測期間未發動）';
+  return `${r.tested}期回測發動率 ${rate}｜池平均 ${(r.poolSum/r.tested).toFixed(0)} 碼｜${m.tag}（數字隨每期開獎自動重算）`;
 }
 function fxComb(n,k){ if(k<0||k>n) return 0; let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return Math.round(r); }
 function fxPop(x){ x=x-((x>>1)&0x55555555); x=(x&0x33333333)+((x>>2)&0x33333333); return (((x+(x>>4))&0x0f0f0f0f)*0x01010101)>>24; }
@@ -1193,7 +1233,7 @@ function renderPick(el){
     </div>`;
   })()}
 
-  ${grpCard('⚡','近期動能流（近30期升溫，效力1.46×）',g2,g=>{
+  ${grpCard('⚡','近期動能流（近30期升溫）',g2,g=>{
     return `<div class="grp-meta">
       <span style="color:#2563eb;font-weight:700">近30期升溫信號，捕捉短期熱號持續性</span><br>
       號碼：${g.nums.map(n=>`${f2(n)}(動能×${g.momFn(n).toFixed(2)},年${ANNUAL.freq[n]}次)`).join(' ')}
@@ -1300,7 +1340,7 @@ function renderPick(el){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
         ${FX_MODES.map(m=>`<button onclick="setFxMode('${m.id}')" class="btn ${fp.mode.id===m.id?'':'btn-gray'}" style="font-size:.75rem;padding:5px 12px">${m.name}</button>`).join('')}
       </div>
-      <div style="font-size:.71rem;color:var(--muted);margin-bottom:7px">${fp.mode.note}</div>
+      <div style="font-size:.71rem;color:var(--muted);margin-bottom:7px">${fxNote(fp.mode)}</div>
       <div style="font-size:.76rem;color:var(--muted);margin-bottom:7px">
         本檔規則：號碼池 =「沉寂期數命中回歸排名前${fp.mode.k}間隔（本期為 <strong>${fp.topGaps.join('、')} 期</strong>）」的號碼 ＋ 逾期號碼（沉寂 ${fp.mode.lo}–${fp.mode.hi} 期）${fp.mode.excl?'；超期（沉寂 ≥2× 個別平均間隔）一律不進池':'；不另排除超期'}。池子每期隨開獎自動更新，玩法固定、號碼自動輪替。
       </div>
@@ -1382,7 +1422,7 @@ function renderAnnual(el){
     <h3>🎯 尾數年度偏移（選號核心規律）</h3>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有3個號碼（10,20,30），理論期望較低（${+(T*5*3/39).toFixed(1)}次 vs 其他尾數${+(T*5*4/39).toFixed(1)}次）</div>
     <table>
-      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual','2026實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th><th>選號建議</th></tr></thead>
+      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual',(rec[0].dt||'').slice(0,4)+'實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th><th>選號建議</th></tr></thead>
       <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:39},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
         const exp=ti===0?+(T*5*3/39).toFixed(1):+(T*5*4/39).toFixed(1);
         const clr=biasClr(bias);
