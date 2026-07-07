@@ -179,19 +179,6 @@ def build_pair_stat(records):
                 pairs[k] = pairs.get(k, 0) + 1
     return pairs
 
-def ensure_consec(nums, cand, score_fn, annual):
-    if annual['consecRate'] < 50: return nums
-    nums_set = set(nums)
-    if any(n+1 in nums_set for n in nums): return nums
-    cand_set = set(cand)
-    for to_out in sorted(nums, key=score_fn):
-        others = [n for n in nums if n != to_out]
-        adj = {nb for n in others for nb in [n-1,n+1]
-               if 1<=nb<=49 and nb not in nums_set and nb in cand_set}
-        if adj:
-            return sorted(others + [max(adj, key=score_fn)])
-    return nums
-
 def _build_dual(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     s3max   = max((ann_score(n, annual) for n in cand), default=0.01)
@@ -204,13 +191,6 @@ def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:6])
 
-def gen_g3(cand, records, annual):
-    dual_fn, _ = _build_dual(cand, records, annual)
-    by_z = {zn: sorted([n for n in cand if z_zone(n)==zn], key=dual_fn, reverse=True) for zn in [1,2,3,4]}
-    pool = by_z[1][:2] + by_z[2][:2] + by_z[3][:2] + by_z[4][:2]
-    pool.sort(key=dual_fn, reverse=True)
-    return ensure_consec(sorted(pool[:6]), cand, dual_fn, annual)
-
 def gen_g4(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     cold_thresh = int(annual['periods'] * 6/49 * 0.9)
@@ -221,30 +201,6 @@ def gen_g4(cand, records, annual):
         picks = sorted(cand, key=mom_fn, reverse=True)
     return sorted(picks[:6])
 
-def tail_chi2(annual, pick, pool):
-    """尾數分佈 vs 均勻的卡方統計量（df=9），由 tailBias 反推"""
-    T = annual['periods']
-    zero_cnt = 3 if pool == 39 else 4
-    per_tail = 4 if pool == 39 else 5
-    chi2 = 0.0
-    for t, b in annual['tailBias'].items():
-        exp = T * pick * (zero_cnt if int(t) == 0 else per_tail) / pool
-        chi2 += exp * (b / 100.0) ** 2
-    return chi2
-
-def gen_g5(cand, records, annual):
-    dual_fn, _ = _build_dual(cand, records, annual)
-    # 卡方把關（df=9, α=.05 臨界值16.92）：尾數分佈與均勻無顯著差異時不啟用熱尾強制
-    hot_tails = ([t for t, b in annual['tailBias'].items() if b >= 8]
-                 if tail_chi2(annual, 6, 49) >= 16.92 else [])
-    if not hot_tails:
-        return sorted(sorted(cand, key=dual_fn, reverse=True)[:6])
-    hot_pool  = sorted([n for n in cand if n%10 in hot_tails], key=dual_fn, reverse=True)
-    cold_pool = sorted([n for n in cand if n%10 not in hot_tails], key=dual_fn, reverse=True)
-    hot_picks = hot_pool[:min(5, len(hot_pool))]
-    rest = [n for n in cold_pool if n not in set(hot_picks)][:6-len(hot_picks)]
-    return sorted((hot_picks+rest)[:6])
-
 def gen_g6(cand, records, annual):
     _, mom_fn = _build_dual(cand, records, annual)
     mom_max = max((mom_fn(n) for n in cand), default=0.01)
@@ -252,22 +208,6 @@ def gen_g6(cand, records, annual):
     pool  = [n for n in cand if n not in must]
     scored = sorted(pool, key=lambda n: ann_score(n,annual)*0.6+(mom_fn(n)/mom_max)*100*0.4, reverse=True)
     return sorted(must + scored[:6-len(must)])
-
-def gen_g8(cand, records, annual):
-    rN = min(30, len(records))
-    rf = [0]*50
-    for r in records[:rN]:
-        for n in r['n']: rf[n]+=1
-    ann_per = annual['periods']
-    def mom_fn(n):
-        e = annual['freq'][n]/ann_per
-        return 0 if e<0.001 else (rf[n]/rN)/e
-    s3max   = max((ann_score(n,annual) for n in cand), default=0.01)
-    mom_max = max((mom_fn(n) for n in cand), default=0.01)
-    def dual_fn(n): return (ann_score(n,annual)/s3max)*60+(mom_fn(n)/mom_max)*40
-    top6 = sorted(cand, key=dual_fn, reverse=True)[:6]
-    if len(top6)<6: return None
-    return ensure_consec(sorted(top6), cand, dual_fn, annual)
 
 def predict_g7(records, st_mg, annual):
     ab   = calc_absent(records)
@@ -363,16 +303,14 @@ def gen_all_predictions(records, st_mg):
     ab   = calc_absent(records)
     cand = [n for n in range(1,50) if ab[n]<st_mg.get(n,999)] or list(range(1,50))
     # G1 已於 2026-07-02 依 180 期滾動回測移除（均中 0.694 低於隨機期望 0.735）
+    # G3/G5/G8 已於 2026-07-07 依 240 期滾動回測移除：與 G7 同屬 dual 分數家族，
+    # 兩兩重疊 5.0-5.9/6 碼（G5×G8 達 5.91），均中 0.779 皆低於 G7 的 0.796，留 G7 代表
     strategies = {
         'G2': gen_g2(cand, records, annual),
-        'G3': gen_g3(cand, records, annual),
         'G4': gen_g4(cand, records, annual),
-        'G5': gen_g5(cand, records, annual),
         'G6': gen_g6(cand, records, annual),
         'G7': predict_g7(records, st_mg, annual),
     }
-    g8 = gen_g8(cand, records, annual)
-    if g8: strategies['G8'] = g8
     strategies['G9'] = gen_g9(records, annual)
     strategies['G10'] = gen_g10(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
