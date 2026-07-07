@@ -1330,7 +1330,7 @@ function renderPick(el){
     </div>`;
   })()}
 
-  ${grpCard('⚡','近期動能流（近30期升溫，效力1.46×）',g2,g=>{
+  ${grpCard('⚡','近期動能流（近30期升溫）',g2,g=>{
     return `<div class="grp-meta">
       <span style="color:#2563eb;font-weight:700">近30期升溫信號，捕捉短期熱號持續性</span><br>
       號碼：${g.nums.map(n=>`${f2(n)}(動能×${g.momFn(n).toFixed(2)},年${ANNUAL.freq[n]}次)`).join(' ')}
