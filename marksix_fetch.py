@@ -30,6 +30,9 @@ HEADERS = {
 }
 BASE_URL = "https://en.lottolyzer.com/history/hong-kong/mark-six/page/{}/per-page/50/summary-view"
 
+# 每組策略出號數（2026-07-12 由 6 擴至 8，各策略選號邏輯不變）
+PICK_N = 8
+
 
 def draw_str_to_p(draw_str: str) -> int:
     """'26/067' → 26067"""
@@ -189,17 +192,17 @@ def _build_dual(cand, records, annual):
 
 def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
-    return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:6])
+    return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:PICK_N])
 
 def gen_g4(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     cold_thresh = int(annual['periods'] * 6/49 * 0.9)
     picks = sorted([n for n in cand if annual['freq'][n]<=cold_thresh and mom_fn(n)>=1.1], key=mom_fn, reverse=True)
-    if len(picks) < 6:
+    if len(picks) < PICK_N:
         picks += sorted([n for n in cand if mom_fn(n)>=1.0 and n not in picks], key=mom_fn, reverse=True)
-    if len(picks) < 6:
+    if len(picks) < PICK_N:
         picks = sorted(cand, key=mom_fn, reverse=True)
-    return sorted(picks[:6])
+    return sorted(picks[:PICK_N])
 
 def gen_g6(cand, records, annual):
     _, mom_fn = _build_dual(cand, records, annual)
@@ -207,7 +210,7 @@ def gen_g6(cand, records, annual):
     must  = [annual['hotNum']] if annual['hotNum'] in cand else []
     pool  = [n for n in cand if n not in must]
     scored = sorted(pool, key=lambda n: ann_score(n,annual)*0.6+(mom_fn(n)/mom_max)*100*0.4, reverse=True)
-    return sorted(must + scored[:6-len(must)])
+    return sorted(must + scored[:PICK_N-len(must)])
 
 def predict_g7(records, st_mg, annual):
     ab   = calc_absent(records)
@@ -236,7 +239,7 @@ def predict_g7(records, st_mg, annual):
     scored = sorted(cand,
         key=lambda n: ann_score(n,annual)/s3max*55+s4fn(n)/s4max*35+pair_score(n)/pair_max*10,
         reverse=True)
-    return sorted(scored[:6])
+    return sorted(scored[:PICK_N])
 
 def build_return_dist(records):
     """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
@@ -250,13 +253,13 @@ def build_return_dist(records):
     return dist
 
 def gen_g9(records, annual):
-    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前6"""
+    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前 PICK_N"""
     dist = build_return_dist(records)
     top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
     ab = calc_absent(records)
     pool = [n for n in range(1, 50) if ab[n] in top3] or list(range(1, 50))
     dual_fn, _ = _build_dual(pool, records, annual)
-    return sorted(sorted(pool, key=dual_fn, reverse=True)[:6])
+    return sorted(sorted(pool, key=dual_fn, reverse=True)[:PICK_N])
 
 def lcg_picks(seed, num_max, k):
     """Lehmer LCG 選號，與網頁 JS 版 lcgPicks 完全一致（G0 隨機對照組用）"""
@@ -279,7 +282,7 @@ def avg_gap_per_num(records):
     return {n: (tot.get(n, 0) / cnt[n] if cnt.get(n) else 49 / 6) for n in range(1, 50)}
 
 def gen_g10(records, annual):
-    """G10 使用者策略：4碼回歸熱區（間隔占比>11%）+ 2碼超期（沉寂≥2×個別平均間隔）"""
+    """G10 使用者策略：回歸熱區（間隔占比>11%）主力 + 2碼超期（沉寂≥2×個別平均間隔）"""
     dist = build_return_dist(records)
     total = sum(dist.values()) or 1
     hot_gaps = {g for g, c in dist.items() if c / total > 0.11}
@@ -288,14 +291,14 @@ def gen_g10(records, annual):
     dual_fn, _ = _build_dual(list(range(1, 50)), records, annual)
     pool_a = sorted([n for n in range(1, 50) if ab[n] in hot_gaps], key=dual_fn, reverse=True)
     pool_b = sorted([n for n in range(1, 50) if ab[n] >= 2 * ag[n]], key=dual_fn, reverse=True)
-    picks = pool_a[:4]
-    for src_pool in (pool_b, pool_a[4:], sorted(range(1, 50), key=dual_fn, reverse=True)):
+    picks = pool_a[:PICK_N - 2]
+    for src_pool in (pool_b, pool_a[PICK_N - 2:], sorted(range(1, 50), key=dual_fn, reverse=True)):
         for n in src_pool:
-            if len(picks) >= 6:
+            if len(picks) >= PICK_N:
                 break
             if n not in picks:
                 picks.append(n)
-    return sorted(picks[:6])
+    return sorted(picks[:PICK_N])
 
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
@@ -314,7 +317,7 @@ def gen_all_predictions(records, st_mg):
     strategies['G9'] = gen_g9(records, annual)
     strategies['G10'] = gen_g10(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
-    strategies['G0'] = lcg_picks(records[0]['p'], 49, 6)
+    strategies['G0'] = lcg_picks(records[0]['p'], 49, PICK_N)
     return strategies
 
 

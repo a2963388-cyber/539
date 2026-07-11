@@ -33,6 +33,9 @@ HEADERS = {
 }
 API_URL = "https://api.taiwanlottery.com/TLCAPIWEB/Lottery/Daily539Result"
 
+# 每組策略出號數（2026-07-12 由 5 擴至 8，各策略選號邏輯不變）
+PICK_N = 8
+
 # 已知錨點：第 115149 期 = 2026-06-19
 ANCHOR_PERIOD = 115149
 ANCHOR_DATE   = date(2026, 6, 19)
@@ -278,22 +281,22 @@ def _build_dual(cand, records, annual):
     return dual_fn, mom_fn
 
 def gen_g1(cand: list, annual: dict) -> list:
-    return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:5])
+    return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:PICK_N])
 
 def gen_g3(cand: list, records: list, annual: dict) -> list:
     dual_fn, _ = _build_dual(cand, records, annual)
     by_z = {}
     for zn in [1, 2, 3, 4]:
         by_z[zn] = sorted([n for n in cand if z_zone(n) == zn], key=dual_fn, reverse=True)
-    pool = by_z[1][:2] + by_z[2][:2] + by_z[3][:2]
-    if len(pool) < 5:
+    pool = by_z[1][:3] + by_z[2][:3] + by_z[3][:3]
+    if len(pool) < PICK_N:
         seen = set(pool)
         for n in by_z[4]:
             if n not in seen:
                 pool.append(n)
                 seen.add(n)
     pool.sort(key=dual_fn, reverse=True)
-    nums = sorted(pool[:5])
+    nums = sorted(pool[:PICK_N])
     return ensure_consec(nums, cand, dual_fn, annual)
 
 def tail_chi2(annual: dict, pick: int, pool: int) -> float:
@@ -313,13 +316,13 @@ def gen_g5(cand: list, records: list, annual: dict) -> list:
     hot_tails = ([t for t, b in annual['tailBias'].items() if b >= 8]
                  if tail_chi2(annual, 5, 39) >= 16.92 else [])
     if not hot_tails:
-        return sorted(sorted(cand, key=dual_fn, reverse=True)[:5])
+        return sorted(sorted(cand, key=dual_fn, reverse=True)[:PICK_N])
     hot_pool  = sorted([n for n in cand if n % 10 in hot_tails], key=dual_fn, reverse=True)
     cold_pool = sorted([n for n in cand if n % 10 not in hot_tails], key=dual_fn, reverse=True)
-    hot_picks = hot_pool[:min(4, len(hot_pool))]
+    hot_picks = hot_pool[:min(PICK_N - 2, len(hot_pool))]
     hot_set   = set(hot_picks)
-    rest = [n for n in cold_pool if n not in hot_set][:5 - len(hot_picks)]
-    return sorted((hot_picks + rest)[:5])
+    rest = [n for n in cold_pool if n not in hot_set][:PICK_N - len(hot_picks)]
+    return sorted((hot_picks + rest)[:PICK_N])
 
 def gen_g6(cand: list, records: list, annual: dict) -> list:
     _, mom_fn = _build_dual(cand, records, annual)
@@ -328,7 +331,7 @@ def gen_g6(cand: list, records: list, annual: dict) -> list:
     must  = [hot_num] if hot_num in cand else []
     pool  = [n for n in cand if n not in must]
     scored = sorted(pool, key=lambda n: ann_score(n, annual) * 0.6 + (mom_fn(n) / mom_max) * 100 * 0.4, reverse=True)
-    return sorted(must + scored[:5 - len(must)])
+    return sorted(must + scored[:PICK_N - len(must)])
 
 def gen_g8(cand: list, records: list, annual: dict) -> list:
     rN = min(30, len(records))
@@ -344,10 +347,10 @@ def gen_g8(cand: list, records: list, annual: dict) -> list:
     mom_max = max((mom_fn(n)            for n in cand), default=0.01)
     def dual_fn(n):
         return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
-    top5raw = sorted(cand, key=dual_fn, reverse=True)[:5]
-    if len(top5raw) < 5:
+    top_raw = sorted(cand, key=dual_fn, reverse=True)[:PICK_N]
+    if len(top_raw) < PICK_N:
         return None
-    return ensure_consec(sorted(top5raw), cand, dual_fn, annual)
+    return ensure_consec(sorted(top_raw), cand, dual_fn, annual)
 
 def build_return_dist(records: list) -> dict:
     """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
@@ -361,13 +364,13 @@ def build_return_dist(records: list) -> dict:
     return dist
 
 def gen_g9(records: list, annual: dict) -> list:
-    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前5"""
+    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前 PICK_N"""
     dist = build_return_dist(records)
     top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
     ab = calc_absent(records)
     pool = [n for n in range(1, 40) if ab[n] in top3] or list(range(1, 40))
     dual_fn, _ = _build_dual(pool, records, annual)
-    return sorted(sorted(pool, key=dual_fn, reverse=True)[:5])
+    return sorted(sorted(pool, key=dual_fn, reverse=True)[:PICK_N])
 
 def lcg_picks(seed: int, num_max: int, k: int) -> list:
     """Lehmer LCG 選號，與網頁 JS 版 lcgPicks 完全一致（G0 隨機對照組用）"""
@@ -390,7 +393,7 @@ def avg_gap_per_num(records: list) -> dict:
     return {n: (tot.get(n, 0) / cnt[n] if cnt.get(n) else 39 / 5) for n in range(1, 40)}
 
 def gen_g10(records: list, annual: dict) -> list:
-    """G10 使用者策略（2026-07-03）：3碼回歸熱區（間隔占比>11%）+ 2碼超期（沉寂≥2×個別平均間隔）
+    """G10 使用者策略（2026-07-03）：回歸熱區（間隔占比>11%）主力 + 2碼超期（沉寂≥2×個別平均間隔）
     100期回測 0.740/期；與 G9 差異在納入超期信號，供與 G9/G0 對照驗證"""
     dist = build_return_dist(records)
     total = sum(dist.values()) or 1
@@ -400,14 +403,14 @@ def gen_g10(records: list, annual: dict) -> list:
     dual_fn, _ = _build_dual(list(range(1, 40)), records, annual)
     pool_a = sorted([n for n in range(1, 40) if ab[n] in hot_gaps], key=dual_fn, reverse=True)
     pool_b = sorted([n for n in range(1, 40) if ab[n] >= 2 * ag[n]], key=dual_fn, reverse=True)
-    picks = pool_a[:3]
-    for src_pool in (pool_b, pool_a[3:], sorted(range(1, 40), key=dual_fn, reverse=True)):
+    picks = pool_a[:PICK_N - 2]
+    for src_pool in (pool_b, pool_a[PICK_N - 2:], sorted(range(1, 40), key=dual_fn, reverse=True)):
         for n in src_pool:
-            if len(picks) >= 5:
+            if len(picks) >= PICK_N:
                 break
             if n not in picks:
                 picks.append(n)
-    return sorted(picks[:5])
+    return sorted(picks[:PICK_N])
 
 def gen_all_predictions(records: list, st_mg: dict) -> dict:
     annual = build_annual(records)
@@ -429,7 +432,7 @@ def gen_all_predictions(records: list, st_mg: dict) -> dict:
     strategies['G9'] = gen_g9(records, annual)
     strategies['G10'] = gen_g10(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
-    strategies['G0'] = lcg_picks(records[0]['p'], 39, 5)
+    strategies['G0'] = lcg_picks(records[0]['p'], 39, PICK_N)
     return strategies
 
 

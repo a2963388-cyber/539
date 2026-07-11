@@ -35,6 +35,9 @@ ANCHOR_DATE = date(2026, 6, 22)
 
 BASE_URL = "https://en.lottolyzer.com/history/united-states/fantasy-5-california/page/{}/per-page/50/summary-view"
 
+# 每組策略出號數（2026-07-12 由 5 擴至 8，各策略選號邏輯不變）
+PICK_N = 8
+
 
 # ── Draw# ↔ 日期換算 ──────────────────────────────────────────
 def draw_to_date(draw: int) -> date:
@@ -195,20 +198,20 @@ def _build_dual(cand, records, annual):
 
 def gen_g2(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
-    return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:5])
+    return sorted(sorted(cand, key=lambda n: mom_fn(n), reverse=True)[:PICK_N])
 
 def gen_g4(cand, records, annual):
     _, _, mom_fn = build_mom(records, annual)
     cold_thresh = int(annual['periods'] * 5 / 39 * 0.9)
     picks = sorted([n for n in cand if annual['freq'][n] <= cold_thresh and mom_fn(n) >= 1.1],
                    key=mom_fn, reverse=True)
-    if len(picks) < 5:
+    if len(picks) < PICK_N:
         extra = sorted([n for n in cand if mom_fn(n) >= 1.0 and n not in picks],
                        key=mom_fn, reverse=True)
         picks = picks + extra
-    if len(picks) < 5:
+    if len(picks) < PICK_N:
         picks = sorted(cand, key=mom_fn, reverse=True)
-    return sorted(picks[:5])
+    return sorted(picks[:PICK_N])
 
 def tail_chi2(annual, pick, pool):
     """尾數分佈 vs 均勻的卡方統計量（df=9），由 tailBias 反推"""
@@ -227,12 +230,12 @@ def gen_g5(cand, records, annual):
     hot_tails = ([t for t, b in annual['tailBias'].items() if b >= 8]
                  if tail_chi2(annual, 5, 39) >= 16.92 else [])
     if not hot_tails:
-        return sorted(sorted(cand, key=dual_fn, reverse=True)[:5])
+        return sorted(sorted(cand, key=dual_fn, reverse=True)[:PICK_N])
     hot_pool  = sorted([n for n in cand if n % 10 in hot_tails], key=dual_fn, reverse=True)
     cold_pool = sorted([n for n in cand if n % 10 not in hot_tails], key=dual_fn, reverse=True)
-    hot_picks = hot_pool[:min(4, len(hot_pool))]
-    rest = [n for n in cold_pool if n not in set(hot_picks)][:5 - len(hot_picks)]
-    return sorted((hot_picks + rest)[:5])
+    hot_picks = hot_pool[:min(PICK_N - 2, len(hot_pool))]
+    rest = [n for n in cold_pool if n not in set(hot_picks)][:PICK_N - len(hot_picks)]
+    return sorted((hot_picks + rest)[:PICK_N])
 
 def build_return_dist(records):
     """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
@@ -246,13 +249,13 @@ def build_return_dist(records):
     return dist
 
 def gen_g9(records, annual):
-    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前5"""
+    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前 PICK_N"""
     dist = build_return_dist(records)
     top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
     ab = calc_absent(records)
     pool = [n for n in range(1, 40) if ab[n] in top3] or list(range(1, 40))
     dual_fn, _ = _build_dual(pool, records, annual)
-    return sorted(sorted(pool, key=dual_fn, reverse=True)[:5])
+    return sorted(sorted(pool, key=dual_fn, reverse=True)[:PICK_N])
 
 def lcg_picks(seed, num_max, k):
     """Lehmer LCG 選號，與網頁 JS 版 lcgPicks 完全一致（G0 隨機對照組用）"""
@@ -275,7 +278,7 @@ def avg_gap_per_num(records):
     return {n: (tot.get(n, 0) / cnt[n] if cnt.get(n) else 39 / 5) for n in range(1, 40)}
 
 def gen_g10(records, annual):
-    """G10 使用者策略：3碼回歸熱區（間隔占比>11%）+ 2碼超期（沉寂≥2×個別平均間隔）"""
+    """G10 使用者策略：回歸熱區（間隔占比>11%）主力 + 2碼超期（沉寂≥2×個別平均間隔）"""
     dist = build_return_dist(records)
     total = sum(dist.values()) or 1
     hot_gaps = {g for g, c in dist.items() if c / total > 0.11}
@@ -284,14 +287,14 @@ def gen_g10(records, annual):
     dual_fn, _ = _build_dual(list(range(1, 40)), records, annual)
     pool_a = sorted([n for n in range(1, 40) if ab[n] in hot_gaps], key=dual_fn, reverse=True)
     pool_b = sorted([n for n in range(1, 40) if ab[n] >= 2 * ag[n]], key=dual_fn, reverse=True)
-    picks = pool_a[:3]
-    for src_pool in (pool_b, pool_a[3:], sorted(range(1, 40), key=dual_fn, reverse=True)):
+    picks = pool_a[:PICK_N - 2]
+    for src_pool in (pool_b, pool_a[PICK_N - 2:], sorted(range(1, 40), key=dual_fn, reverse=True)):
         for n in src_pool:
-            if len(picks) >= 5:
+            if len(picks) >= PICK_N:
                 break
             if n not in picks:
                 picks.append(n)
-    return sorted(picks[:5])
+    return sorted(picks[:PICK_N])
 
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
@@ -308,7 +311,7 @@ def gen_all_predictions(records, st_mg):
     }
     strategies['G10'] = gen_g10(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
-    strategies['G0'] = lcg_picks(records[0]['p'], 39, 5)
+    strategies['G0'] = lcg_picks(records[0]['p'], 39, PICK_N)
     return strategies
 
 def build_log_entries(new_sorted, base_pending, base_picklog, all_records, st_mg):
