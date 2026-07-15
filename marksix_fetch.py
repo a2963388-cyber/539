@@ -300,11 +300,45 @@ def gen_g10(records, annual):
                 picks.append(n)
     return sorted(picks[:PICK_N])
 
+def unpop_score(n):
+    """冷門度（0~100）：避開大眾熱門簽法——生日範圍(1~31)、月份(1~12)、
+    華人幸運號(3,6,8,9,18,28,38,48)與西方幸運7；尾4因忌諱少人簽反而加分"""
+    s = 40.0
+    if n >= 32: s += 35
+    if n > 12:  s += 15
+    if n % 10 == 4: s += 10
+    if n in (3, 6, 7, 8, 9, 18, 28, 38, 48): s -= 25
+    return s
+
+def gen_g11(records, annual):
+    """G11 冷門組合（2026-07-15 上線）：dual 分數與冷門度各半加權。
+    誠實揭露：不改變命中機率；目標是避開熱門簽法降低撞號，中獎時
+    分彩金稀釋較少（唯一能改善條件賠付的方向）。保底至少3碼≥32"""
+    pool = list(range(1, 50))
+    dual_fn, _ = _build_dual(pool, records, annual)
+    dmax = max(dual_fn(n) for n in pool) or 0.01
+    umax = max(unpop_score(n) for n in pool)
+    score = lambda n: (dual_fn(n) / dmax) * 50 + (unpop_score(n) / umax) * 50
+    picks = sorted(pool, key=score, reverse=True)[:PICK_N]
+    high = [n for n in picks if n >= 32]
+    if len(high) < 3:
+        subs = sorted([n for n in pool if n >= 32 and n not in picks], key=score, reverse=True)
+        lows = sorted([n for n in picks if n < 32], key=score)
+        for c in subs[:3 - len(high)]:
+            picks.remove(lows.pop(0))
+            picks.append(c)
+    return sorted(picks)
+
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual: return {}
     ab   = calc_absent(records)
     cand = [n for n in range(1,50) if ab[n]<st_mg.get(n,999)] or list(range(1,50))
+    # ── 策略淘汰規則（2026-07-15 事前註冊，禁止事後改動）──────────
+    # 1. 新策略上線後累積滿 50 期才可評估；屆時「平均命中 < G0 且
+    #    中2+次數 ≤ G0」→ 移除
+    # 2. dual 分數家族滿 50 期檢查兩兩平均重疊碼數 > 6/8 → 合併留均中較高者
+    # 3. G0 隨機對照組永久保留，不參與淘汰
     # G1 已於 2026-07-02 依 180 期滾動回測移除（均中 0.694 低於隨機期望 0.735）
     # G3/G5/G8 已於 2026-07-07 依 240 期滾動回測移除：與 G7 同屬 dual 分數家族，
     # 兩兩重疊 5.0-5.9/6 碼（G5×G8 達 5.91），均中 0.779 皆低於 G7 的 0.796，留 G7 代表
@@ -316,6 +350,7 @@ def gen_all_predictions(records, st_mg):
     }
     strategies['G9'] = gen_g9(records, annual)
     strategies['G10'] = gen_g10(records, annual)
+    strategies['G11'] = gen_g11(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
     strategies['G0'] = lcg_picks(records[0]['p'], 49, PICK_N)
     return strategies
