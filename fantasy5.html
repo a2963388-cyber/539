@@ -166,7 +166,7 @@ textarea:focus { border-color: var(--primary); }
 
 <main id="content"></main>
 
-<script src="data_f5.js"></script>
+<script>document.write('<script src="data_f5.js?v=' + Date.now() + '"><\/script>');</script>
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────
 const Z = n => n<=9?1:n<=19?2:n<=29?3:4;
