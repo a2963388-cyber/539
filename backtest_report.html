@@ -1,0 +1,291 @@
+<title>彩券系統全歷史回測報告</title>
+<style>
+:root{
+  --bg:#F4F6F5; --surface:#FFFFFF; --ink:#1C2A33; --muted:#5B6B75;
+  --line:#E1E7E5; --grid:#EDF1F0;
+  --accent:#0891B2; --accent-ink:#076A83; --accent-soft:#E3F3F7;
+  --control:#C2620A; --control-ink:#9A4E08; --control-soft:#FBEFE1;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0F1519; --surface:#171F25; --ink:#E5ECEF; --muted:#8FA1AB;
+    --line:#2A3841; --grid:#222E36;
+    --accent:#28A5B2; --accent-ink:#5FC2CD; --accent-soft:#123037;
+    --control:#CF7F2C; --control-ink:#E3A055; --control-soft:#332512;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1519; --surface:#171F25; --ink:#E5ECEF; --muted:#8FA1AB;
+  --line:#2A3841; --grid:#222E36;
+  --accent:#28A5B2; --accent-ink:#5FC2CD; --accent-soft:#123037;
+  --control:#CF7F2C; --control-ink:#E3A055; --control-soft:#332512;
+}
+:root[data-theme="light"]{
+  --bg:#F4F6F5; --surface:#FFFFFF; --ink:#1C2A33; --muted:#5B6B75;
+  --line:#E1E7E5; --grid:#EDF1F0;
+  --accent:#0891B2; --accent-ink:#076A83; --accent-soft:#E3F3F7;
+  --control:#C2620A; --control-ink:#9A4E08; --control-soft:#FBEFE1;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:15px; line-height:1.75;
+}
+.wrap{max-width:880px; margin:0 auto; padding:40px 20px 72px; display:flex; flex-direction:column; gap:28px}
+.eyebrow{font-size:.76rem; letter-spacing:.18em; color:var(--muted); font-weight:600}
+h1{font-size:1.9rem; line-height:1.3; margin:6px 0 0; text-wrap:balance; letter-spacing:.01em}
+.sub{color:var(--muted); font-size:.86rem; margin-top:10px}
+.thesis{
+  background:var(--surface); border:1px solid var(--line); border-radius:10px;
+  padding:20px 24px; font-size:1.02rem; line-height:1.9;
+  border-left:4px solid var(--control);
+}
+.thesis b{color:var(--control-ink)}
+.tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+.tile{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
+.tile .num{font-size:1.85rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.2}
+.tile .lbl{font-size:.8rem; color:var(--muted); margin-top:4px}
+.tile.ctl .num{color:var(--control-ink)}
+section.sys{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:24px}
+.sys-head{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 14px; margin-bottom:4px}
+.sys-head h2{font-size:1.2rem; margin:0}
+.sys-meta{font-size:.8rem; color:var(--muted); font-variant-numeric:tabular-nums}
+.legend{display:flex; gap:18px; font-size:.78rem; color:var(--muted); margin:10px 0 4px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.dotk{width:10px; height:10px; border-radius:50%; flex:none}
+.chart{position:relative; margin-top:8px}
+.axis{position:relative; height:22px; margin-left:118px; margin-right:64px; font-size:.7rem; color:var(--muted); font-variant-numeric:tabular-nums}
+.axis i{position:absolute; transform:translateX(-50%); font-style:normal}
+.rows{position:relative}
+.refline{position:absolute; top:0; bottom:0; width:0; border-left:2px dashed var(--line); z-index:0}
+.reftag{position:absolute; top:-40px; transform:translateX(-50%); font-size:.68rem; color:var(--muted); background:var(--bg); padding:1px 7px; border-radius:99px; white-space:nowrap}
+.row{display:flex; align-items:center; gap:0; height:34px; position:relative}
+.row .name{width:118px; flex:none; font-size:.8rem; display:flex; align-items:baseline; gap:6px; white-space:nowrap}
+.row .name b{font-variant-numeric:tabular-nums}
+.row .name small{color:var(--muted); font-size:.72rem}
+.row .track{flex:1; position:relative; height:100%; border-bottom:1px solid var(--grid)}
+.row:last-child .track{border-bottom:none}
+.row .val{width:64px; flex:none; text-align:right; font-size:.82rem; font-variant-numeric:tabular-nums; font-weight:600}
+.ci{position:absolute; top:50%; height:2px; margin-top:-1px; background:var(--accent); opacity:.45; border-radius:1px}
+.dot{position:absolute; top:50%; width:11px; height:11px; border-radius:50%; transform:translate(-50%,-50%); background:var(--accent); box-shadow:0 0 0 2px var(--surface)}
+.row.ctl .ci{background:var(--control)}
+.row.ctl .dot{background:var(--control)}
+.row.ctl .name{color:var(--control-ink); font-weight:600}
+.val .sig{color:var(--control-ink)}
+.row:hover .track{background:color-mix(in srgb, var(--grid) 55%, transparent)}
+#tip{
+  position:fixed; z-index:9; pointer-events:none; display:none;
+  background:var(--ink); color:var(--bg); font-size:.74rem; line-height:1.6;
+  padding:8px 11px; border-radius:8px; max-width:260px;
+  font-variant-numeric:tabular-nums;
+}
+details{margin-top:14px}
+summary{cursor:pointer; font-size:.82rem; color:var(--accent-ink); font-weight:600}
+summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+.tblwrap{overflow-x:auto; margin-top:10px}
+table{border-collapse:collapse; width:100%; font-size:.8rem; font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px; text-align:right; border-bottom:1px solid var(--grid); white-space:nowrap}
+th{color:var(--muted); font-weight:600; font-size:.72rem}
+th:first-child,td:first-child{text-align:left}
+tr.ctl td{color:var(--control-ink); font-weight:600}
+.cards{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 20px}
+.card h3{font-size:.95rem; margin:0 0 8px; display:flex; gap:8px; align-items:baseline}
+.card h3 .no{color:var(--accent-ink); font-variant-numeric:tabular-nums; font-size:.8rem; flex:none}
+.card p{margin:0; font-size:.84rem; color:var(--muted); line-height:1.85}
+.card p b{color:var(--ink)}
+.caveat{border-left:4px solid var(--accent); background:var(--surface); border-radius:10px; border:1px solid var(--line); border-left:4px solid var(--accent); padding:18px 22px; font-size:.84rem; color:var(--muted)}
+.caveat h3{margin:0 0 6px; font-size:.92rem; color:var(--ink)}
+.caveat ul{margin:0; padding-left:1.2em}
+.caveat li{margin:4px 0}
+footer{font-size:.76rem; color:var(--muted); border-top:1px solid var(--line); padding-top:16px; line-height:2}
+h2.sect{font-size:1.05rem; margin:8px 0 -12px}
+@media (max-width:640px){
+  .tiles{grid-template-columns:1fr}
+  .cards{grid-template-columns:1fr}
+  .row .name{width:96px}
+  .axis{margin-left:96px}
+  h1{font-size:1.5rem}
+}
+@media (prefers-reduced-motion: no-preference){
+  .dot{transition:transform .12s}
+  .row:hover .dot{transform:translate(-50%,-50%) scale(1.25)}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">三合一彩券分析系統</div>
+    <h1>全歷史滾動回測報告</h1>
+    <div class="sub">2026-07-15・方法：每一期的預測只使用「該期之前」的歷史資料（out-of-sample），逐期對答案；直接呼叫產線 fetch 模組，與實際選號 100% 同一套程式。腳本：<code>~/539/backtest_all.py</code></div>
+  </header>
+
+  <div class="thesis">
+    整份報告最重要的一行：<b>G0 隨機對照組在 539 拿下全場第一（1.170 中/期），在六合彩還測出「統計顯著」（p = .028）</b>。隨機數不可能有預測力——它的好成績證明了這種幅度的領先，純靠運氣就辦得到。所以：<b>沒有任何策略的命中率能與隨機區分。</b>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="num">612</div><div class="lbl">可測期數（539 141・F5 192・六合彩 279）</div></div>
+    <div class="tile"><div class="num">24</div><div class="lbl">策略 × 系統檢定格（多重比較的分母）</div></div>
+    <div class="tile ctl"><div class="num">0</div><div class="lbl">通過 Bonferroni 校正的策略（門檻 p &lt; .002）</div></div>
+  </div>
+
+  <div id="systems"></div>
+
+  <h2 class="sect">小羊羊判讀</h2>
+  <div class="cards">
+    <div class="card">
+      <h3><span class="no">①</span>隨機組奪冠，是功能不是 bug</h3>
+      <p>G0 的存在就是為了畫出「運氣的天花板」。它在 141 期裡平均 1.170 中/期、領先所有真策略——代表排行榜上 <b>±0.15 級別的差距都在雜訊範圍內</b>，看到誰暫時領先都不必當真。</p>
+    </div>
+    <div class="card">
+      <h3><span class="no">②</span>「顯著」也不能信：多重比較</h3>
+      <p>六合彩 G2 的 p = .006 看起來很香，但我們一口氣測了 24 格，用 Bonferroni 校正後門檻約 <b>.002，無一過關</b>。旁邊 G0 的 p = .028 就是活生生的假陽性示範。</p>
+    </div>
+    <div class="card">
+      <h3><span class="no">③</span>倖存者偏誤：成績還偏樂觀</h3>
+      <p>現存策略是先前用<b>同一批歷史</b>篩選過的倖存者（G2/G4/G7 就是這樣被淘汰的），回測成績天生高估。即使如此仍贏不了 G0——結論反而更穩。</p>
+    </div>
+    <div class="card">
+      <h3><span class="no">④</span>G11 貼著隨機＝符合設計</h3>
+      <p>G11 冷門組合三系統 0.964–1.050，完全貼著期望值。它本來就<b>不是為了提高命中率</b>，而是避開熱門簽法、中大獎時少跟人分彩金——這個價值回測測不到，只有中頭獎那天兌現。</p>
+    </div>
+  </div>
+
+  <div class="caveat">
+    <h3>方法限制（誠實揭露）</h3>
+    <ul>
+      <li>相鄰期的訓練資料高度重疊，逐期命中並非完全獨立，95% 信賴區間略偏窄（偏樂觀）。</li>
+      <li>排除規則（ab≥mg）使用現行統計表，有極輕微資訊洩漏；先前驗證過此規則幾乎從不影響選號（539/六合彩 0 期、F5 3/130 期）。</li>
+      <li>訓練窗下限 30 期，早期預測的年度統計較粗。</li>
+      <li>回測回答的是「歷史上如此」，50 期實戰追蹤規則照舊——那才是上線後的乾淨考試。</li>
+    </ul>
+  </div>
+
+  <div class="thesis" style="border-left-color:var(--accent)">
+    實務結論不變：<b>選號策略是有紀律的樂趣</b>；真正有數學根據的是<b>輪盤覆蓋保證、固定投資盤的紀律、預算控管</b>，以及 G11 的條件賠付優化。期望值不因任何選號法改變。
+  </div>
+
+  <footer>
+    資料截至：539 第 115171 期（2026-07-15）・F5 Draw 11938・六合彩 26/076。
+    每格數字 = 該策略 8 碼選號與實際開獎的交集數，逐期平均；* = 未經校正的 p &lt; .05。
+    回測腳本已入庫（commit 14491c4），隨時可重跑驗證。
+  </footer>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DMIN = 0.80, DMAX = 1.35;
+const SYSTEMS = [
+  {
+    name: '今彩539', meta: '可測 141 期・訓練 ≥30 期・隨機期望 1.026 中/期', exp: 1.026,
+    rows: [
+      ['G0','隨機對照',1.170,0.15,0.057,46,11,1],
+      ['G3','均衡區間',1.128,0.15,0.171,42,10,1],
+      ['G5','熱尾優先',1.106,0.15,0.287,43,11,0],
+      ['G6','遺漏壓力',1.106,0.15,0.278,43,10,0],
+      ['G1','年度熱號',1.099,0.15,0.321,43,8,1],
+      ['G10','回歸+超期',1.085,0.15,0.424,40,9,1],
+      ['G8','年度+動能',1.064,0.14,0.596,38,9,0],
+      ['G11','冷門組合',1.050,0.14,0.729,41,5,0],
+      ['G9','回歸熱區',1.043,0.13,0.795,36,3,1],
+    ]
+  },
+  {
+    name: 'CA Fantasy 5', meta: '可測 192 期・訓練 ≥30 期・隨機期望 1.026 中/期', exp: 1.026,
+    rows: [
+      ['G9','回歸熱區',1.151,0.13,0.068,65,16,2],
+      ['G2','近期動能',1.052,0.11,0.640,52,6,0],
+      ['G10','回歸+超期',1.052,0.13,0.692,56,12,1],
+      ['G5','熱尾優先',1.005,0.12,0.745,54,8,1],
+      ['G0','隨機對照',0.995,0.11,0.597,50,6,0],
+      ['G4','冷轉熱',0.984,0.12,0.483,41,9,1],
+      ['G11','冷門組合',0.964,0.11,0.287,43,5,2],
+    ]
+  },
+  {
+    name: '香港六合彩', meta: '可測 279 期・訓練 ≥30 期・隨機期望 0.980 中/期', exp: 0.980,
+    rows: [
+      ['G2','近期動能',1.122,0.10,0.006,87,16,1],
+      ['G0','隨機對照',1.097,0.10,0.028,86,18,1],
+      ['G4','冷轉熱',1.065,0.11,0.116,80,20,1],
+      ['G10','回歸+超期',1.065,0.10,0.102,79,16,1],
+      ['G9','回歸熱區',1.054,0.11,0.170,82,15,3],
+      ['G7','雙信號',1.050,0.10,0.176,77,18,0],
+      ['G6','遺漏壓力',1.039,0.10,0.244,73,16,1],
+      ['G11','冷門組合',0.978,0.11,0.984,76,14,1],
+    ]
+  }
+];
+const pct = v => ((v - DMIN) / (DMAX - DMIN) * 100).toFixed(2) + '%';
+const host = document.getElementById('systems');
+host.style.display = 'flex'; host.style.flexDirection = 'column'; host.style.gap = '28px';
+
+for (const sys of SYSTEMS) {
+  const sec = document.createElement('section');
+  sec.className = 'sys';
+  const ticks = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3]
+    .map(t => `<i style="left:${pct(t)}">${t.toFixed(1)}</i>`).join('');
+  const rowsHtml = sys.rows.map(([g, nm, mean, ci, p, h2, h3, h4]) => {
+    const ctl = g === 'G0';
+    const sig = p < 0.05 ? ` <span class="sig" title="未經校正 p=${p.toFixed(3)}">*</span>` : '';
+    return `<div class="row ${ctl ? 'ctl' : ''}" tabindex="0"
+      data-tip="${g} ${nm}｜平均 ${mean.toFixed(3)} ±${ci.toFixed(2)}（95%CI）｜p=${p.toFixed(3)}${p < .05 ? '（未過 Bonferroni 校正）' : ''}｜中2+：${h2} 次・中3+：${h3} 次・中4+：${h4} 次">
+      <div class="name"><b>${g}</b><small>${nm}</small></div>
+      <div class="track">
+        <div class="ci" style="left:${pct(mean - ci)}; width:calc(${pct(mean + ci)} - ${pct(mean - ci)})"></div>
+        <div class="dot" style="left:${pct(mean)}"></div>
+      </div>
+      <div class="val">${mean.toFixed(3)}${sig}</div>
+    </div>`;
+  }).join('');
+  const tbl = sys.rows.map(([g, nm, mean, ci, p, h2, h3, h4]) =>
+    `<tr class="${g === 'G0' ? 'ctl' : ''}"><td>${g} ${nm}</td><td>${mean.toFixed(3)}</td><td>±${ci.toFixed(2)}</td><td>${p.toFixed(3)}${p < .05 ? ' *' : ''}</td><td>${h2}</td><td>${h3}</td><td>${h4}</td></tr>`).join('');
+  sec.innerHTML = `
+    <div class="sys-head"><h2>${sys.name}</h2><span class="sys-meta">${sys.meta}</span></div>
+    <div class="legend">
+      <span><span class="dotk" style="background:var(--accent)"></span>選號策略（平均命中 ±95%CI）</span>
+      <span><span class="dotk" style="background:var(--control)"></span>G0 隨機對照組</span>
+    </div>
+    <div class="chart">
+      <div class="axis">${ticks}</div>
+      <div class="rows">
+        <div class="refline" style="left:calc(${pct(sys.exp)} + 118px * 0 )"></div>
+        ${rowsHtml}
+      </div>
+    </div>
+    <details><summary>完整數據表</summary>
+      <div class="tblwrap"><table>
+        <thead><tr><th>策略</th><th>平均命中</th><th>95%CI</th><th>p值</th><th>中2+</th><th>中3+</th><th>中4+</th></tr></thead>
+        <tbody>${tbl}</tbody>
+      </table></div>
+    </details>`;
+  host.appendChild(sec);
+  // 參考線要對齊 track 區（扣掉左右欄寬）：改用 JS 定位
+  const rowsEl = sec.querySelector('.rows');
+  const ref = sec.querySelector('.refline');
+  const place = () => {
+    const track = sec.querySelector('.track');
+    const left = track.offsetLeft + track.offsetWidth * (sys.exp - DMIN) / (DMAX - DMIN);
+    ref.style.left = left + 'px';
+    ref.innerHTML = `<span class="reftag">隨機期望 ${sys.exp.toFixed(3)}</span>`;
+    ref.style.top = '-26px';
+  };
+  place();
+  addEventListener('resize', place);
+}
+
+const tip = document.getElementById('tip');
+document.addEventListener('mousemove', e => {
+  const row = e.target.closest('.row');
+  if (!row) { tip.style.display = 'none'; return; }
+  tip.textContent = row.dataset.tip;
+  tip.style.display = 'block';
+  const x = Math.min(e.clientX + 14, innerWidth - 280);
+  const y = Math.min(e.clientY + 16, innerHeight - 80);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+document.addEventListener('mouseleave', () => tip.style.display = 'none');
+</script>
