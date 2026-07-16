@@ -94,7 +94,8 @@ def fetch_draws_api(from_period: int) -> list:
     covered = False   # 是否已看到 from_period（含）以前的期數 → 代表銜接無缺漏
     d = date.today().replace(day=1)
     for _ in range(3):
-        url = f"{API_URL}?period&month={d.year}-{d.month:02d}"
+        # pageSize=50：API 預設每頁僅回 10 筆，停機多天時會漏抓月中期數
+        url = f"{API_URL}?period&month={d.year}-{d.month:02d}&pageNum=1&pageSize=50"
         r = requests.get(url, headers=HEADERS, timeout=20)
         r.raise_for_status()
         items = (r.json().get("content") or {}).get("daily539Res") or []
