@@ -308,14 +308,16 @@ function savePickLog() {
   lsSet('f5pl', JSON.stringify(pickLog.filter(e=>!basePeriods.has(e.period))));
 }
 function lockPick() {
-  const {g2,g4,g5,g9,g10} = allGroups();
+  const {g2,g4,g5,g9,g10,g11,gc} = allGroups();
   const s = {};
   if(g2) s.G2=g2.nums; if(g4) s.G4=g4.nums;
   if(g5) s.G5=g5.nums; if(g9) s.G9=g9.nums; if(g10) s.G10=g10.nums;
+  if(g11) s.G11=g11.nums;
   const g0=genG0(); if(g0) s.G0=g0;
+  if(gc) s.GC=gc.nums;
   pendingPick = {strategies:s, excluded:excluded(), ts:Date.now()};
   savePickLog();
-  alert('✅ 已鎖定本期5組選號＋G0隨機對照！\n（G1/G3/G6/G7/G8 已依130期回測移除，新增G9回歸熱區）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
+  alert('✅ 已鎖定本期7組選號＋G0隨機對照！\n（含 G11 冷門組合、GC 覆蓋度立柱10碼）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
 }
 
 // ── CORE ANALYSIS ──────────────────────────────────────────
@@ -517,9 +519,46 @@ function genG10(){
           nA:poolA.length, nB:poolB.length, poolA, poolB, gapFn, agF};
 }
 
+// G11 冷門組合（2026-07-15，與 fetch gen_g11 一致）：dual 50%＋冷門度 50%，保底3碼≥32
+function unpopScore(n){
+  let s=40;
+  if(n>=32) s+=35;
+  if(n>12) s+=15;
+  if(n%10===4) s+=10;
+  if([3,6,7,8,9,18,28,38].includes(n)) s-=25;
+  return s;
+}
+function genG11(){
+  const pool=Array.from({length:39},(_,i)=>i+1);
+  const {dualFn}=buildDual(pool);
+  const dmax=Math.max(...pool.map(dualFn))||0.01;
+  const umax=Math.max(...pool.map(unpopScore));
+  const score=n=>(dualFn(n)/dmax)*50+(unpopScore(n)/umax)*50;
+  const picks=[...pool].sort((a,b)=>score(b)-score(a)).slice(0,PICK_N);
+  const high=picks.filter(n=>n>=32);
+  if(high.length<3){
+    const subs=pool.filter(n=>n>=32&&!picks.includes(n)).sort((a,b)=>score(b)-score(a)).slice(0,3-high.length);
+    const lows=picks.filter(n=>n<32).sort((a,b)=>score(a)-score(b));
+    for(const c of subs){ picks.splice(picks.indexOf(lows.shift()),1); picks.push(c); }
+  }
+  return {nums:picks.sort((a,b)=>a-b)};
+}
+// GC 覆蓋度立柱（2026-07-19，與 fetch gen_gc 一致）：現役策略投票（不含G0）前10碼，順序＝覆蓋度高→低、同票取小號
+function genGC(strats){
+  const cov={};
+  for(const [k,nums] of Object.entries(strats)){ if(k==='G0'||!nums) continue; for(const n of nums) cov[n]=(cov[n]||0)+1; }
+  const nums=Object.keys(cov).map(Number).sort((a,b)=>a-b).sort((a,b)=>cov[b]-cov[a]).slice(0,10);
+  return {nums, cov};
+}
+
 function allGroups() {
-  const cand=candidates();
-  return {cand, g2:genG2(cand), g4:genG4(cand), g5:genG5(cand), g9:genG9(), g10:genG10()};
+  const groups={cand:candidates()};
+  const cand=groups.cand;
+  Object.assign(groups, {g2:genG2(cand), g4:genG4(cand), g5:genG5(cand), g9:genG9(), g10:genG10(), g11:genG11()});
+  const s={};
+  for(const [k,v] of Object.entries(groups)){ if(k!=='cand'&&v&&v.nums) s[k.toUpperCase()]=v.nums; }
+  groups.gc=genGC(s);
+  return groups;
 }
 
 function calcExcludeZone() {
@@ -1163,7 +1202,7 @@ function buildFixedWheel(){
 }
 
 function renderPick(el){
-  const {cand,g2,g4,g5,g9,g10}=allGroups();
+  const {cand,g2,g4,g5,g9,g10,g11,gc}=allGroups();
   const ex=excluded();
   const zc=zoneCounts(10);
   const {hot,cold}=hotCold(zc);
@@ -1233,6 +1272,27 @@ function renderPick(el){
         ${ck(g.poolA.slice(0,3).every(n=>g.nums.includes(n)),'回歸3碼入選')}
         ${ck(g.nums.some(n=>g.poolB.includes(n)),'含超期碼')}
       </div>
+    </div>`;
+  })()}
+
+  ${(()=>{
+    if(!g11) return '';
+    const g=g11;
+    return `<div class="grp" style="border-left:4px solid #7c3aed"><div class="grp-title">🧊 G11 冷門組合（避熱門簽法）</div>
+      <div class="grp-nums">${g.nums.map(n=>ball(n)).join('')}</div>
+      <div class="grp-meta">dual 分數 50%＋冷門度 50%，保底至少 3 碼 ≥32（避生日/月份/幸運號簽法）<br>
+      <span style="color:var(--muted)">誠實揭露：不改變命中機率，只降低與大眾撞號、改善中獎時的分彩金稀釋</span></div>
+    </div>`;
+  })()}
+
+  ${(()=>{
+    if(!gc) return '';
+    const g=gc;
+    return `<div class="grp" style="border-left:4px solid #d97706"><div class="grp-title">🗳️ GC 覆蓋度立柱（策略投票前10碼）</div>
+      <div class="grp-nums">${g.nums.map(n=>ball(n)).join('')}</div>
+      <div class="grp-meta">依被現役策略圈選次數高→低立柱（不含G0，同票取小號），順序即立柱順序：<br>
+      ${g.nums.map(n=>`${f2(n)}(${g.cov[n]}票)`).join(' ')}<br>
+      <span style="color:var(--muted)">10碼基準：均中期望 1.28 碼/期、中≥3星 9.6%；2026-07-19 事前註冊，滿 50 期評估</span></div>
     </div>`;
   })()}
 
@@ -1361,8 +1421,8 @@ function renderPick(el){
   <div class="card" style="text-align:center;background:linear-gradient(135deg,#f0fdf4,#dbeafe)">
     <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">🔒 鎖定本期選號預測</div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">將以上5組選號鎖定為本期預測，輸入下期開獎號碼後自動計算各組命中數，並累積策略績效</p>
-    <button class="btn" onclick="lockPick()" style="font-size:.95rem;padding:11px 28px">${pendingPick?'🔒 重新鎖定（覆蓋舊預測）':'🔒 鎖定本期全部預測（G2/G4/G5/G9/G10）'}</button>
-    ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定5組（含G9/G10），等待下期開獎結果</div>`:''}
+    <button class="btn" onclick="lockPick()" style="font-size:.95rem;padding:11px 28px">${pendingPick?'🔒 重新鎖定（覆蓋舊預測）':'🔒 鎖定本期全部預測（G2/G4/G5/G9/G10/G11/GC）'}</button>
+    ${pendingPick?`<div style="margin-top:10px;font-size:.78rem;color:#16a34a;font-weight:600">✅ 已鎖定7組（含G11/GC），等待下期開獎結果</div>`:''}
     <div style="margin-top:8px"><button onclick="go('track')" style="border:none;background:none;color:var(--primary);font-size:.8rem;cursor:pointer;text-decoration:underline">查看中獎追蹤 →</button></div>
   </div>`;
 }

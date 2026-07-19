@@ -205,12 +205,11 @@ def gen_g4(cand, records, annual):
     return sorted(picks[:PICK_N])
 
 def gen_g6(cand, records, annual):
-    _, mom_fn = _build_dual(cand, records, annual)
-    mom_max = max((mom_fn(n) for n in cand), default=0.01)
-    must  = [annual['hotNum']] if annual['hotNum'] in cand else []
-    pool  = [n for n in cand if n not in must]
-    scored = sorted(pool, key=lambda n: ann_score(n,annual)*0.6+(mom_fn(n)/mom_max)*100*0.4, reverse=True)
-    return sorted(must + scored[:PICK_N-len(must)])
+    """G6 遺漏壓力流：cand 依沉寂期數高→低取前 PICK_N（與頁面 genG6/buildGap 一致，同沉寂取小號）。
+    2026-07-19 修正：此前誤留 2026-06-26 改版前的舊算法（年度分60%+動能40%），
+    2026-07-02～07-19 的 PICKLOG G6 紀錄為舊算法所產，評估 G6 時需分段看"""
+    ab = calc_absent(records)
+    return sorted(sorted(cand, key=lambda n: (-ab[n], n))[:PICK_N])
 
 def predict_g7(records, st_mg, annual):
     ab   = calc_absent(records)
