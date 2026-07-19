@@ -325,6 +325,20 @@ def gen_g11(records, annual):
             picks.append(c)
     return sorted(picks)
 
+def gen_gc(strategies):
+    """GC 覆蓋度立柱（2026-07-19 事前註冊）：統計各號碼被多少現役策略
+    （不含 G0 隨機對照）圈選，覆蓋度高→低取前 10 碼，同票取小號。
+    10 碼基準：均中期望 1.282 碼/期、中≥3星 9.6%；碼數與 8 碼策略不同，
+    滿 50 期評估時只與自身隨機基準比較，不與 8 碼策略直接比。
+    誠實揭露：各策略共用同一批歷史資料，共識≠獨立證據，期望值不變。"""
+    cov = {}
+    for g, nums in strategies.items():
+        if g == 'G0':
+            continue
+        for n in nums:
+            cov[n] = cov.get(n, 0) + 1
+    return sorted(sorted(cov), key=lambda n: -cov[n])[:10]
+
 def gen_all_predictions(records, st_mg):
     annual = build_annual(records)
     if not annual:
@@ -347,6 +361,8 @@ def gen_all_predictions(records, st_mg):
     strategies['G11'] = gen_g11(records, annual)
     # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
     strategies['G0'] = lcg_picks(records[0]['p'], 39, PICK_N)
+    # GC 覆蓋度立柱：由現役策略投票產生（排 G0），輸出即立柱順序（高→低）
+    strategies['GC'] = gen_gc(strategies)
     return strategies
 
 def build_log_entries(new_sorted, base_pending, base_picklog, all_records, st_mg):
