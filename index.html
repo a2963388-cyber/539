@@ -1480,11 +1480,11 @@ function renderPick(el){
   })()}
 
   ${(()=>{
-    const grps=[['G1',g1],['G3',g3],['G5',g5],['G6',g6],['G8',g8],['G9',g9],['G10',g10]].filter(([,g])=>g).map(([k,g])=>[k,g.nums]);
+    const grps=[['G1',g1],['G3',g3],['G5',g5],['G6',g6],['G8',g8],['G9',g9],['G10',g10],['G11',g11]].filter(([,g])=>g).map(([k,g])=>[k,g.nums]);
     if(grps.length<2) return '';
     const cnt={};
     grps.forEach(([,nums])=>nums.forEach(n=>cnt[n]=(cnt[n]||0)+1));
-    const covered=Object.keys(cnt).length, slots=grps.length*5;
+    const covered=Object.keys(cnt).length, slots=grps.reduce((a,[,nums])=>a+nums.length,0);
     let maxOv=0,maxPair='';
     for(let i=0;i<grps.length;i++)for(let j=i+1;j<grps.length;j++){
       const s=new Set(grps[i][1]);
@@ -1497,12 +1497,12 @@ function renderPick(el){
       <h3>🧩 策略覆蓋度（重疊診斷）</h3>
       <div style="font-size:.8rem;margin-bottom:6px">
         ${grps.length} 組共 ${slots} 個名額，覆蓋 <strong style="color:${covClr};font-size:1.05em">${covered}</strong>/39 個不同號碼
-        ｜最大重疊：<strong>${maxPair}</strong>（${maxOv}/5 碼相同）
+        ｜最大重疊：<strong>${maxPair}</strong>（${maxOv}/${PICK_N} 碼相同）
       </div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
         ${Object.entries(cnt).sort((a,b)=>b[1]-a[1]||(+a[0])-(+b[0])).map(([n,c])=>`<div style="text-align:center">${ball(+n,'ball-sm')}<div style="font-size:.6rem;font-weight:700;color:${c>=4?'#dc2626':c>=2?'#d97706':'#94a3b8'}">×${c}</div></div>`).join('')}
       </div>
-      <div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
+      <div style="font-size:.7rem;color:#d97706;font-weight:600;margin-bottom:4px">🗳️ 此票數排序（同票取小號、不含G0）取前10碼＝GC 覆蓋度立柱</div><div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
       ${g0?`<div style="font-size:.74rem;padding:6px 9px;background:#f8fafc;border-radius:6px">🎲 <strong>G0 隨機對照組</strong>（每期自動鎖定，僅作基準不建議下注）：${g0.map(f2).join(' ')}<span style="color:var(--muted);margin-left:6px">若 G0 長期表現與各策略無異，即為「無預測力」的直接證據</span></div>`:''}
     </div>`;
   })()}
