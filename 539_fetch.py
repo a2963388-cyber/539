@@ -454,6 +454,63 @@ def gen_gc(strategies: dict) -> list:
             cov[n] = cov.get(n, 0) + 1
     return sorted(sorted(cov), key=lambda n: -cov[n])[:10]
 
+def build_con_stat(records: list) -> dict:
+    """馬可夫連動統計（與頁面 buildConStat 一致）：records 新到舊，統計前後期連動"""
+    s = {}
+    ordered = list(reversed(records))
+    for i in range(len(ordered) - 1):
+        prev, curr = ordered[i]['n'], ordered[i + 1]['n']
+        for n in prev:
+            d = s.setdefault(n, {'total': 0, 'followedBy': {}})
+            d['total'] += 1
+            for m in curr:
+                d['followedBy'][m] = d['followedBy'].get(m, 0) + 1
+    return s
+
+def _tofixed2(x: float) -> float:
+    """模擬 JS toFixed(2)（四捨五入 half-up），確保與頁面同結果"""
+    from decimal import Decimal, ROUND_HALF_UP
+    return float(Decimal(repr(x)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+def calc_exclude_zone(records: list) -> list:
+    """不出牌預測區（與頁面 calcExcludeZone 排除邏輯一致）：
+    S2 區間輪動 70%＋S3 反馬可夫 30%，取分數最高 15 碼為建議排除。
+    2026-07-20 誠實揭露：三系統 walk-forward 回測與隨機基準無統計差異，
+    此區價值是縮池輔助非預測；記入 pending/PICKLOG 供 out-of-sample 追蹤"""
+    POOL, PICK, EXCL = 39, 5, 15
+    allc = list(range(1, POOL + 1))
+    if len(records) < 5:
+        return allc[:EXCL]
+    zone_sz = {}
+    for n in allc:
+        zone_sz[z_zone(n)] = zone_sz.get(z_zone(n), 0) + 1
+    rnz = min(10, len(records))
+    z_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
+    for r in records[:rnz]:
+        for n in r['n']:
+            z_cnt[z_zone(n)] += 1
+    z_heat = {}
+    for z in (1, 2, 3, 4):
+        e = rnz * PICK * zone_sz[z] / POOL
+        z_heat[z] = _tofixed2(z_cnt[z] / e) if e > 0 else 1
+    zh_max = max(max(z_heat.values()), 0.01)
+    s2 = lambda n: z_heat[z_zone(n)] / zh_max * 100
+    con = build_con_stat(records)
+    mf = {n: 0.0 for n in allc}
+    opp = 0
+    for prev in records[0]['n']:
+        c = con.get(prev)
+        if c and c['total'] > 0:
+            t = c['total']
+            for m in allc:
+                mf[m] += (c['followedBy'].get(m, 0) + 1) / (t + POOL)
+            opp += 1
+    raw = (lambda n: mf[n] / opp) if opp else (lambda n: 0.0)
+    mmax = max(max(raw(n) for n in allc), 0.001)
+    s3 = lambda n: (1 - raw(n) / mmax) * 100
+    comb_s = lambda n: s2(n) * 0.7 + s3(n) * 0.3
+    return sorted(allc, key=lambda n: (-comb_s(n), n))[:EXCL]
+
 def gen_all_predictions(records: list, st_mg: dict) -> dict:
     annual = build_annual(records)
     if not annual:
@@ -497,11 +554,13 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
             continue
         if idx == 0 and base_pending and base_pending.get('strategies'):
             strat, ts, backfill = base_pending['strategies'], base_pending.get('ts', 0), False
+            excl = base_pending.get('excluded')
         else:
             hist = [r for r in all_records if r['p'] < d['p']]
             if len(hist) < 40:
                 continue
             strat, ts, backfill = gen_all_predictions(hist, st_mg), int(time.time() * 1000), True
+            excl = calc_exclude_zone(hist)
         if not strat:
             continue
         hit_nums = {g: sorted(set(nums) & set(d['n'])) for g, nums in strat.items()}
@@ -514,6 +573,9 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
             'hitNums':    hit_nums,
             'ts':         ts,
         }
+        if excl:
+            entry['excluded'] = excl
+            entry['excludedHits'] = len(set(excl) & set(d['n']))
         if backfill:
             entry['backfill'] = True
         entries.append(entry)
@@ -701,6 +763,7 @@ def update_html(new_draws: list, dry_run: bool = False):
     new_strategies = gen_all_predictions(all_records, st_mg)
     new_pending = {
         'strategies': new_strategies,
+        'excluded': calc_exclude_zone(all_records),
         'ts': int(time.time() * 1000),
     }
 
