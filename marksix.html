@@ -534,10 +534,10 @@ function genG11(){
   }
   return {nums:picks.sort((a,b)=>a-b)};
 }
-// GC 覆蓋度立柱（2026-07-19，與 fetch gen_gc 一致）：現役策略投票（不含G0）前10碼，順序＝覆蓋度高→低、同票取小號
+// GC 覆蓋度立柱 v2（2026-07-21 起含G0票源，與 fetch gen_gc 一致；v1 2026-07-19~20 不含G0）：前10碼，順序＝覆蓋度高→低、同票取小號
 function genGC(strats){
   const cov={};
-  for(const [k,nums] of Object.entries(strats)){ if(k==='G0'||!nums) continue; for(const n of nums) cov[n]=(cov[n]||0)+1; }
+  for(const [k,nums] of Object.entries(strats)){ if(!nums) continue; for(const n of nums) cov[n]=(cov[n]||0)+1; }
   const nums=Object.keys(cov).map(Number).sort((a,b)=>a-b).sort((a,b)=>cov[b]-cov[a]).slice(0,10);
   return {nums, cov};
 }
@@ -550,6 +550,7 @@ function allGroups() {
   if(pred.length>=PICK_N) groups.g7={nums:pred.slice(0,PICK_N).map(x=>x.n)};
   const s={};
   for(const [k,v] of Object.entries(groups)){ if(k!=='cand'&&v&&v.nums) s[k.toUpperCase()]=v.nums; }
+  const g0v=genG0(); if(g0v) s.G0=g0v;
   groups.gc=genGC(s);
   return groups;
 }
@@ -1393,7 +1394,7 @@ function renderPick(el){
     const g=gc;
     return `<div class="grp" style="border-left:4px solid #d97706"><div class="grp-title">🗳️ GC 覆蓋度立柱（策略投票前10碼）</div>
       <div class="grp-nums">${g.nums.map(n=>ball(n)).join('')}</div>
-      <div class="grp-meta">依被現役策略圈選次數高→低立柱（不含G0，同票取小號），順序即立柱順序：<br>
+      <div class="grp-meta">依被策略圈選次數高→低立柱（v2 含G0票源，同票取小號），順序即立柱順序：<br>
       ${g.nums.map(n=>`${f2(n)}(${g.cov[n]}票)`).join(' ')}<br>
       <span style="color:var(--muted)">10碼基準（49選6）：均中期望 1.22 碼/期、中≥3碼 9.0%；2026-07-19 事前註冊，滿 50 期評估</span></div>
     </div>`;
@@ -1460,7 +1461,8 @@ function renderPick(el){
   ${(()=>{
     const pr=predictNextDraw();
     const g7nums=pr.length>=PICK_N?pr.slice(0,PICK_N).map(x=>x.n):null;
-    const grps=[['G2',g2&&g2.nums],['G4',g4&&g4.nums],['G6',g6&&g6.nums],['G7',g7nums],['G9',g9&&g9.nums],['G10',g10&&g10.nums],['G11',g11&&g11.nums]].filter(([,nums])=>nums);
+    const g0=genG0();
+    const grps=[['G2',g2&&g2.nums],['G4',g4&&g4.nums],['G6',g6&&g6.nums],['G7',g7nums],['G9',g9&&g9.nums],['G10',g10&&g10.nums],['G11',g11&&g11.nums],['G0',g0]].filter(([,nums])=>nums);
     if(grps.length<2) return '';
     const cnt={};
     grps.forEach(([,nums])=>nums.forEach(n=>cnt[n]=(cnt[n]||0)+1));
@@ -1472,7 +1474,6 @@ function renderPick(el){
       if(ov>maxOv){maxOv=ov;maxPair=`${grps[i][0]}×${grps[j][0]}`;}
     }
     const covClr=covered>=26?'#16a34a':covered>=18?'#d97706':'#dc2626';
-    const g0=genG0();
     return `<div class="card" style="border-left:4px solid #0ea5e9">
       <h3>🧩 策略覆蓋度（重疊診斷）</h3>
       <div style="font-size:.8rem;margin-bottom:6px">
@@ -1482,7 +1483,7 @@ function renderPick(el){
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
         ${Object.entries(cnt).sort((a,b)=>b[1]-a[1]||(+a[0])-(+b[0])).map(([n,c])=>`<div style="text-align:center">${ball(+n,'ball-sm')}<div style="font-size:.6rem;font-weight:700;color:${c>=5?'#dc2626':c>=3?'#d97706':'#94a3b8'}">×${c}</div></div>`).join('')}
       </div>
-      <div style="font-size:.7rem;color:#d97706;font-weight:600;margin-bottom:4px">🗳️ 此票數排序（同票取小號、不含G0）取前10碼＝GC 覆蓋度立柱</div><div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
+      <div style="font-size:.7rem;color:#d97706;font-weight:600;margin-bottom:4px">🗳️ 此票數排序（同票取小號、含G0票源 v2）取前10碼＝GC 覆蓋度立柱</div><div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">重疊越高＝實際獨立信號越少。多組選同一號碼不代表信心加倍，多半是策略共用同一評分來源。</div>
       ${g0?`<div style="font-size:.74rem;padding:6px 9px;background:#f8fafc;border-radius:6px">🎲 <strong>G0 隨機對照組</strong>（每期自動鎖定，僅作基準不建議下注）：${g0.map(f2).join(' ')}<span style="color:var(--muted);margin-left:6px">若 G0 長期表現與各策略無異，即為「無預測力」的直接證據</span></div>`:''}
     </div>`;
   })()}
