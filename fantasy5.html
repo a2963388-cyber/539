@@ -292,7 +292,16 @@ function loadPickLog() {
   const p = lsGet('f5pp');
   const l = lsGet('f5pl');
   // pendingPick：優先用 localStorage（手動鎖定），否則用 BASE_PENDING（自動預測）
-  pendingPick = p ? JSON.parse(p) : (BASE_PENDING ? JSON.parse(JSON.stringify(BASE_PENDING)) : null);
+  let localPP = p ? JSON.parse(p) : null;
+  // 過期鎖定自動失效（2026-07-22）：自動結算不會清 localStorage，鎖定時的最新期 < 資料最新期
+  // 表示該期已開獎結算 → 作廢；舊格式（無 basePeriod）用 BASE_PENDING.ts 比較
+  if(localPP){
+    const stale = localPP.basePeriod !== undefined
+      ? localPP.basePeriod < BASE_REC[0].p
+      : !!(BASE_PENDING && BASE_PENDING.ts > (localPP.ts||0));
+    if(stale){ localPP = null; lsDel('f5pp'); }
+  }
+  pendingPick = localPP || (BASE_PENDING ? JSON.parse(JSON.stringify(BASE_PENDING)) : null);
   // pickLog：BASE_PICKLOG 為基底，localStorage 追加未同步的紀錄
   const base = BASE_PICKLOG ? JSON.parse(JSON.stringify(BASE_PICKLOG)) : [];
   const local = l ? JSON.parse(l) : [];
@@ -315,7 +324,7 @@ function lockPick() {
   if(g11) s.G11=g11.nums;
   const g0=genG0(); if(g0) s.G0=g0;
   if(gc) s.GC=gc.nums;
-  pendingPick = {strategies:s, excluded:calcExcludeZone().exclude, ts:Date.now()};
+  pendingPick = {strategies:s, excluded:calcExcludeZone().exclude, basePeriod:rec[0]?.p, ts:Date.now()};
   savePickLog();
   alert('✅ 已鎖定本期7組選號＋G0隨機對照！\n（含 G11 冷門組合、GC 覆蓋度立柱10碼）\n輸入下期開獎號碼後將自動計算命中數。\n前往「🏆 中獎追蹤」查看狀態。');
 }
