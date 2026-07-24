@@ -1330,11 +1330,11 @@ function renderPick(el){
   </div>
 
   ${(()=>{
-    const rows=[['📅 G1 年度熱號',g1],['⚖️ G3 均衡區間',g3],['🎯 G5 熱尾優先',g5],['⏳ G6 遺漏壓力',g6],['🎰 G8 年度+動能',g8],['🔁 G9 回歸熱區',g9],['🧬 G10 回歸+超期',g10],['🧊 G11 冷門組合',g11],['🗳️ GC 覆蓋立柱',gc]].filter(([,g])=>g&&g.top5);
+    const rows=[['📅 G1 年度熱號',g1],['⚖️ G3 均衡區間',g3],['🎯 G5 熱尾優先',g5],['⏳ G6 遺漏壓力',g6],['🎰 G8 年度+動能',g8],['🔁 G9 回歸熱區',g9],['🧬 G10 回歸+超期',g10],['🧊 G11 冷門組合',g11],['🗳️ GC 覆蓋立柱',gc],['🎲 隨機5碼（G0同源）',{top5:lcgPicks(rec[0].p,39,5)}]].filter(([,g])=>g&&g.top5);
     if(!rows.length) return '';
     return `<div class="card" style="border-left:4px solid #f59e0b">
       <h3>⭐ 精選5碼總表（各策略內部排序前5）</h3>
-      <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">5碼＝可直接下一注；依各策略自身分數／構造順序取前5，非齊頭截斷。引擎與命中追蹤仍以完整選號計，期望值不因精選改變。</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">5碼＝可直接下一注；依各策略自身分數／構造順序取前5，非齊頭截斷。🎲隨機5碼＝LCG（種子=最新期號）前5顆，每期固定可驗證。引擎與命中追蹤仍以完整選號計，期望值不因精選改變。</div>
       <table><tbody>
         ${rows.map(([lb,g])=>`<tr><td style="font-size:.78rem;white-space:nowrap;padding-right:8px">${lb}</td><td><div style="display:flex;gap:2px;flex-wrap:wrap">${g.top5.map(n=>ball(n,'ball-sm')).join('')}</div></td></tr>`).join('')}
       </tbody></table>
