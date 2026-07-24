@@ -434,7 +434,7 @@ function genG2(cand) {
   const {momFn} = buildMom();
   const sorted = [...cand].sort((a,b) => momFn(b)-momFn(a));
   const nums = sorted.slice(0,PICK_N).sort((a,b)=>a-b);
-  return {nums, momFn, sorted};
+  return {nums, momFn, sorted, top5:sorted.slice(0,5)};
 }
 
 // G3/G5/G8 已於 2026-07-07 依 240 期滾動回測移除：與 G7 同屬 dual 分數家族，
@@ -452,14 +452,15 @@ function genG4(cand) {
     picks = [...picks, ...extra];
   }
   if(picks.length < PICK_N) { const {gapFn}=buildGap(cand); picks=[...cand].sort((a,b)=>gapFn(b)-gapFn(a)); }
-  return {nums: picks.slice(0,PICK_N).sort((a,b)=>a-b), momFn};
+  return {nums: picks.slice(0,PICK_N).sort((a,b)=>a-b), momFn, top5:picks.slice(0,5)};
 }
 
 // G6: 遺漏壓力流 — 選候選池中遺漏最久的 PICK_N 碼，信號與頻率/動能正交
 function genG6(cand) {
   const {gapFn} = buildGap(cand);
-  const nums = [...cand].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,PICK_N).sort((a,b)=>a-b);
-  return {nums, gapFn};
+  const ranked = [...cand].sort((a,b)=>gapFn(b)-gapFn(a)).slice(0,PICK_N);
+  const nums = [...ranked].sort((a,b)=>a-b);
+  return {nums, gapFn, top5:ranked.slice(0,5)};
 }
 
 
@@ -474,7 +475,7 @@ function genG9() {
   if(!pool.length) pool = all;
   const {dualFn} = buildDual(pool);
   const nums = [...pool].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,PICK_N).sort((a,b)=>a-b);
-  return {nums, top3, gapFn, dualFn, poolSize:pool.length, dist};
+  return {nums, top3, gapFn, dualFn, poolSize:pool.length, dist, top5:[...nums].sort((a,b)=>dualFn(b)-dualFn(a)).slice(0,5)};
 }
 
 // G0 隨機對照組：Lehmer LCG 以最新期號為種子，與 fetch script (Python lcg_picks) 完全一致
@@ -516,7 +517,7 @@ function genG10(){
   for(const pool of [poolB, poolA.slice(PICK_N-2), [...all].sort((a,b)=>dualFn(b)-dualFn(a))])
     for(const n of pool){ if(picks.length>=PICK_N)break; if(!picks.includes(n))picks.push(n); }
   return {nums:picks.slice(0,PICK_N).sort((a,b)=>a-b), hotGaps:[...hotGaps].sort((a,b)=>a-b),
-          nA:poolA.length, nB:poolB.length, poolA, poolB, gapFn, agF};
+          nA:poolA.length, nB:poolB.length, poolA, poolB, gapFn, agF, top5:picks.slice(0,5)};
 }
 
 // G11 冷門組合（2026-07-15，與 fetch gen_g11 一致）：dual 50%＋冷門度 50%，保底3碼≥32
@@ -541,14 +542,15 @@ function genG11(){
     const lows=picks.filter(n=>n<32).sort((a,b)=>score(a)-score(b));
     for(const c of subs){ picks.splice(picks.indexOf(lows.shift()),1); picks.push(c); }
   }
-  return {nums:picks.sort((a,b)=>a-b)};
+  const top5=[...picks].sort((a,b)=>score(b)-score(a)).slice(0,5);
+  return {nums:picks.sort((a,b)=>a-b), top5};
 }
 // GC 覆蓋度立柱 v2（2026-07-21 起含G0票源，與 fetch gen_gc 一致；v1 2026-07-19~20 不含G0）：前10碼，順序＝覆蓋度高→低、同票取小號
 function genGC(strats){
   const cov={};
   for(const [k,nums] of Object.entries(strats)){ if(!nums) continue; for(const n of nums) cov[n]=(cov[n]||0)+1; }
   const nums=Object.keys(cov).map(Number).sort((a,b)=>a-b).sort((a,b)=>cov[b]-cov[a]).slice(0,10);
-  return {nums, cov};
+  return {nums, cov, top5:nums.slice(0,5)};
 }
 
 function allGroups() {
@@ -556,7 +558,7 @@ function allGroups() {
   const cand=groups.cand;
   Object.assign(groups, {g2:genG2(cand), g4:genG4(cand), g6:genG6(cand), g9:genG9(), g10:genG10(), g11:genG11()});
   const pred=predictNextDraw();
-  if(pred.length>=PICK_N) groups.g7={nums:pred.slice(0,PICK_N).map(x=>x.n)};
+  if(pred.length>=PICK_N) groups.g7={nums:pred.slice(0,PICK_N).map(x=>x.n), top5:pred.slice(0,5).map(x=>x.n)};
   const s={};
   for(const [k,v] of Object.entries(groups)){ if(k!=='cand'&&v&&v.nums) s[k.toUpperCase()]=v.nums; }
   const g0v=genG0(); if(g0v) s.G0=g0v;
@@ -1257,7 +1259,7 @@ function buildFixedWheel(){
 }
 
 function renderPick(el){
-  const {cand,g2,g4,g6,g9,g10,g11,gc}=allGroups();
+  const {cand,g2,g4,g6,g7,g9,g10,g11,gc}=allGroups();
   const ex=excluded();
   const zc=zoneCounts(10);
   const {hot,cold}=hotCold(zc);
@@ -1286,6 +1288,18 @@ function renderPick(el){
       <span>冷區：<span class="tag tag-cold">${ZN[cold]} ${zc[cold]}次</span></span>
     </div>
   </div>
+
+  ${(()=>{
+    const rows=[['⚡ G2 近期動能',g2],['🌡️ G4 冷轉熱',g4],['⏳ G6 遺漏壓力',g6],['📡 G7 雙信號',g7],['🔁 G9 回歸熱區',g9],['🧬 G10 回歸+超期',g10],['🧊 G11 冷門組合',g11],['🗳️ GC 覆蓋立柱',gc]].filter(([,g])=>g&&g.top5);
+    if(!rows.length) return '';
+    return `<div class="card" style="border-left:4px solid #f59e0b">
+      <h3>⭐ 精選5碼總表（各策略內部排序前5）</h3>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">5碼＝可直接下一注；依各策略自身分數／構造順序取前5，非齊頭截斷。引擎與命中追蹤仍以完整選號計，期望值不因精選改變。</div>
+      <table><tbody>
+        ${rows.map(([lb,g])=>`<tr><td style="font-size:.78rem;white-space:nowrap;padding-right:8px">${lb}</td><td><div style="display:flex;gap:2px;flex-wrap:wrap">${g.top5.map(n=>ball(n,'ball-sm')).join('')}</div></td></tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  })()}
 
   ${(()=>{
     if(!rec[0]) return '';
