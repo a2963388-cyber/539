@@ -1334,9 +1334,9 @@ function renderPick(el){
     if(!rows.length) return '';
     return `<div class="card" style="border-left:4px solid #f59e0b">
       <h3>⭐ 精選5碼總表（各策略內部排序前5）</h3>
-      <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">5碼＝可直接下一注；依各策略自身分數／構造順序取前5，非齊頭截斷。🎲隨機5碼＝LCG（種子=最新期號）前5顆，每期固定可驗證。引擎與命中追蹤仍以完整選號計，期望值不因精選改變。</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">5碼＝可直接下一注；依各策略自身分數／構造順序取前5，非齊頭截斷。🎲隨機5碼＝LCG（種子=最新期號）前5顆，每期固定可驗證。撞號風險＝與大眾簽法（生日1–31、月份、幸運號）的重疊度：🔴高撞＝中獎時容易多人分彩金，🟢低撞＝獨得機會較高——只影響分彩金，不影響命中率。引擎與命中追蹤仍以完整選號計，期望值不因精選改變。</div>
       <table><tbody>
-        ${rows.map(([lb,g])=>`<tr><td style="font-size:.78rem;white-space:nowrap;padding-right:8px">${lb}</td><td><div style="display:flex;gap:2px;flex-wrap:wrap">${g.top5.map(n=>ball(n,'ball-sm')).join('')}</div></td></tr>`).join('')}
+        ${rows.map(([lb,g])=>{const bd=g.top5.filter(n=>n<=31).length;const u=g.top5.reduce((a,n)=>a+unpopScore(n),0)/5;const clr=u>=70?'#16a34a':u>=50?'#d97706':'#dc2626';const tag=u>=70?'🟢 低':u>=50?'🟡 中':'🔴 高';return `<tr><td style="font-size:.78rem;white-space:nowrap;padding-right:8px">${lb}</td><td><div style="display:flex;gap:2px;flex-wrap:wrap">${g.top5.map(n=>ball(n,'ball-sm')).join('')}</div></td><td style="font-size:.72rem;white-space:nowrap;text-align:center;color:${clr};font-weight:700">${tag}撞<div style="font-weight:400;color:var(--muted);font-size:.64rem">${bd}/5 生日碼</div></td></tr>`;}).join('')}
       </tbody></table>
     </div>`;
   })()}
