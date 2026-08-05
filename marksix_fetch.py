@@ -28,7 +28,12 @@ DATA_FILE = Path(__file__).parent / "data_m6.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
-BASE_URL = "https://en.lottolyzer.com/history/hong-kong/mark-six/page/{}/per-page/50/summary-view"
+# 2026-08-05 換源：舊源 en.lottolyzer.com 的 hong-kong/mark-six 路徑已被站方改掛
+# 台灣威力彩（頁面 title 變 "Super Lotto 638 - Taiwan"），期號欄格式也從 26/082 變純數字，
+# 導致正則永遠不匹配 →「無新資料」假象（7/30 之後停更 5 天才發現）。
+# 新主源 cpzhan 帶「期數」欄可直接對到期號；備援 pilio 只有日期，期號用主源或遞推補。
+BASE_URL = "https://www.cpzhan.com/liu-he-cai/all-results"
+FALLBACK_URL = "https://www.pilio.idv.tw/ltohk/list.asp"
 
 # 每組策略出號數（2026-07-12 由 6 擴至 8，各策略選號邏輯不變）
 PICK_N = 8
@@ -52,44 +57,89 @@ def read_latest_dt(html: str):
     return None
 
 
-def fetch_draws(from_p: int) -> list:
+def _rows_of(html: str) -> list:
+    """把 HTML 表格拆成每列的欄位字串陣列"""
+    out = []
+    for row in re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL):
+        tds = [re.sub(r'<[^>]+>', '', t).replace('&nbsp;', ' ').strip()
+               for t in re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)]
+        if tds:
+            out.append(tds)
+    return out
+
+
+def fetch_from_cpzhan(from_p: int) -> list:
+    """主源：cpzhan 全年結果表（年份, 期數, 日期, N1..N6, 特碼）"""
+    r = requests.get(BASE_URL, headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    if '六合彩' not in r.text:
+        raise ValueError('主源頁面不含「六合彩」字樣，疑似被改掛其他彩種')
+
+    draws = []
+    for tds in _rows_of(r.text):
+        if len(tds) < 10 or not re.match(r'^20\d\d$', tds[0]):
+            continue
+        if not (tds[1].isdigit() and re.match(r'^20\d\d-\d\d-\d\d$', tds[2])):
+            continue
+        p = int(tds[0][2:]) * 1000 + int(tds[1])
+        if p <= from_p:
+            continue
+        nums = [int(x) for x in tds[3:9] if x.isdigit() and 1 <= int(x) <= 49]
+        if len(nums) != 6 or not tds[9].isdigit():
+            continue
+        draws.append({'p': p, 'draw': f'{tds[0][2:]}/{int(tds[1]):03d}',
+                      'dt': tds[2], 'n': sorted(nums), 'e': int(tds[9])})
+    return draws
+
+
+def fetch_from_pilio(from_p: int, latest_dt) -> list:
+    """備援：pilio 只給日期＋號碼，沒有期號 → 依日期排序從 from_p 遞推期號"""
+    r = requests.get(FALLBACK_URL, headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    if '六合彩' not in r.text:
+        raise ValueError('備援頁面不含「六合彩」字樣')
+
+    found = []
+    for tds in _rows_of(r.text):
+        # 日期欄長相：'08/0426(二)' = MM/DD + 民國後兩碼西元年 + (週幾)
+        if len(tds) < 3:
+            continue
+        m = re.match(r'^(\d\d)/(\d\d)(\d\d)\(', tds[0])
+        if not m:
+            continue
+        mm, dd, yy = m.groups()
+        dt = f'20{yy}-{mm}-{dd}'
+        nums = [int(x) for x in re.findall(r'\d+', tds[1]) if 1 <= int(x) <= 49]
+        extra = int(tds[2]) if tds[2].isdigit() else 0
+        if len(nums) == 6 and extra:
+            found.append({'dt': dt, 'n': sorted(nums), 'e': extra})
+
+    # 只留比現有最新一期更晚的日期，由舊到新遞推期號
+    if latest_dt:
+        found = [d for d in found if d['dt'] > latest_dt.isoformat()]
+    found.sort(key=lambda d: d['dt'])
+    draws = []
+    for i, d in enumerate(found, start=1):
+        p = from_p + i
+        draws.append({'p': p, 'draw': f'{p // 1000}/{p % 1000:03d}', **d})
+    return draws
+
+
+def fetch_draws(from_p: int, latest_dt=None) -> list:
     results = []
-    for page in range(1, 4):
-        url = BASE_URL.format(page)
+    try:
+        results = fetch_from_cpzhan(from_p)
+        if results:
+            print(f"✅ 找到 {len(results)} 筆新資料（主源 cpzhan）")
+    except Exception as e:
+        print(f"⚠️ 主源失敗（{e}），改用備援 pilio")
         try:
-            r = requests.get(url, headers=HEADERS, timeout=20)
-            r.raise_for_status()
-        except requests.RequestException as e:
-            print(f"❌ 抓取失敗（page {page}）：{e}")
-            break
-
-        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL)
-        page_draws = []
-        found_old = False
-
-        for row in rows:
-            tds = [re.sub(r'<[^>]+>', '', t).strip()
-                   for t in re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)]
-            if (len(tds) >= 3 and re.match(r'\d\d/\d+', tds[0])
-                    and re.match(r'20\d\d-\d\d-\d\d', tds[1] if len(tds) > 1 else '')):
-                p = draw_str_to_p(tds[0])
-                if p <= from_p:
-                    found_old = True
-                    continue
-                nums = [int(x) for x in tds[2].split(',')
-                        if x.strip().isdigit() and 1 <= int(x) <= 49]
-                extra = int(tds[3]) if len(tds) > 3 and tds[3].strip().isdigit() else 0
-                if len(nums) == 6:
-                    page_draws.append({'p': p, 'draw': tds[0], 'dt': tds[1],
-                                       'n': sorted(nums), 'e': extra})
-
-        results.extend(page_draws)
-        if found_old or not page_draws:
-            break
-        time.sleep(0.5)
-
-    if results:
-        print(f"✅ 找到 {len(results)} 筆新資料")
+            results = fetch_from_pilio(from_p, latest_dt)
+            if results:
+                print(f"✅ 找到 {len(results)} 筆新資料（備援 pilio，期號為遞推值）")
+        except Exception as e2:
+            print(f"❌ 備援也失敗：{e2}")
+            return []
     return sorted(results, key=lambda x: x['p'], reverse=True)
 
 
@@ -643,10 +693,10 @@ def main():
     print(f"目前最新：{current_latest}（{current_latest//1000:02d}/{current_latest%1000:03d}）")
     print("抓取中...")
 
-    draws = fetch_draws(current_latest)
+    latest_dt = read_latest_dt(html)
+    draws = fetch_draws(current_latest, latest_dt)
     if not draws:
         print("✅ 無新資料（今日可能尚未開獎，或已是最新）")
-        latest_dt = read_latest_dt(html)
         if latest_dt:
             gap_days = (date.today() - latest_dt).days
             if gap_days >= 4:
