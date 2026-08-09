@@ -27,14 +27,17 @@ except ImportError:
     print("❌ 請先安裝：pip3 install requests beautifulsoup4")
     sys.exit(1)
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import pick_engine  # 4×3 選號引擎（sfg-v1，2026-08-09）
+GAME = '539'
+
 DATA_FILE = Path(__file__).parent / "data_539.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 }
 API_URL = "https://api.taiwanlottery.com/TLCAPIWEB/Lottery/Daily539Result"
 
-# 每組策略出號數（2026-07-12 由 5 擴至 8，各策略選號邏輯不變）
-PICK_N = 8
 
 # 已知錨點：第 115149 期 = 2026-06-19
 ANCHOR_PERIOD = 115149
@@ -187,119 +190,6 @@ def z_zone(n: int) -> int:
     if n <= 29: return 3
     return 4
 
-def build_annual(records: list) -> dict:
-    T = len(records)
-    if not T:
-        return None
-    first_p = records[-1]['p']
-    last_p  = records[0]['p']
-    freq = [0] * 40
-    zone_cnt = {1:0, 2:0, 3:0, 4:0}
-    tail_cnt = [0] * 10
-    consec_count = 0
-    sum_total = 0
-    pat_cnt = {}
-
-    for r in records:
-        for n in r['n']:
-            freq[n] += 1
-            zone_cnt[z_zone(n)] += 1
-            tail_cnt[n % 10] += 1
-        s = sorted(r['n'])
-        for i in range(len(s) - 1):
-            if s[i+1] == s[i] + 1:
-                consec_count += 1
-                break
-        sum_total += sum(r['n'])
-        zp = [0, 0, 0, 0]
-        for n in r['n']:
-            zp[z_zone(n) - 1] += 1
-        pat = '-'.join(str(x) for x in zp)
-        pat_cnt[pat] = pat_cnt.get(pat, 0) + 1
-
-    total_balls = T * 5
-    zone_pct = {zn: round(zone_cnt[zn] / total_balls * 100, 1) for zn in [1, 2, 3, 4]}
-    tail_bias = {}
-    for t in range(10):
-        exp = T * 5 * 3 / 39 if t == 0 else T * 5 * 4 / 39
-        tail_bias[t] = round((tail_cnt[t] / exp - 1) * 100, 1)
-
-    consec_rate  = round(consec_count / T * 100, 1)
-    avg_sum      = round(sum_total / T, 1)
-    hot_num      = max(range(1, 40), key=lambda n: freq[n])
-    ann_max      = max(freq[1:])
-    tail_bias_max = max((v for v in tail_bias.values() if v > 0), default=1)
-
-    return {
-        'periods': T, 'firstP': first_p, 'lastP': last_p,
-        'freq': freq, 'tailBias': tail_bias, 'zonePct': zone_pct,
-        'consecRate': consec_rate, 'avgSum': avg_sum, 'hotNum': hot_num,
-        'annMax': ann_max, 'tailBiasMax': tail_bias_max,
-    }
-
-def ann_score(n: int, annual: dict) -> float:
-    tb = max(0, annual['tailBias'].get(n % 10, 0))
-    return (annual['freq'][n] / annual['annMax']) * 70 + tb / annual['tailBiasMax'] * 30
-
-def build_mom(records: list, annual: dict):
-    rN = min(30, len(records))
-    rf = [0] * 40
-    for r in records[:rN]:
-        for n in r['n']:
-            rf[n] += 1
-    ann_per = annual['periods']
-    def mom_fn(n):
-        e = annual['freq'][n] / ann_per
-        return 0 if e < 0.001 else (rf[n] / rN) / e
-    return rN, rf, mom_fn
-
-def ensure_consec(nums: list, cand: list, score_fn, annual: dict) -> list:
-    if annual['consecRate'] < 50:
-        return nums
-    nums_set = set(nums)
-    if any(n + 1 in nums_set for n in nums):
-        return nums
-    cand_set = set(cand)
-    by_score = sorted(nums, key=score_fn)
-    for to_out in by_score:
-        others = [n for n in nums if n != to_out]
-        adj = set()
-        for n in others:
-            for nb in [n - 1, n + 1]:
-                if 1 <= nb <= 39 and nb not in nums_set and nb in cand_set:
-                    adj.add(nb)
-        if adj:
-            best = max(adj, key=score_fn)
-            return sorted(others + [best])
-    return nums
-
-def _build_dual(cand, records, annual):
-    _, _, mom_fn = build_mom(records, annual)
-    s3max  = max((ann_score(n, annual) for n in cand), default=0.01)
-    mom_max = max((mom_fn(n) for n in cand), default=0.01)
-    def dual_fn(n):
-        return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
-    return dual_fn, mom_fn
-
-def gen_g1(cand: list, annual: dict) -> list:
-    return sorted(sorted(cand, key=lambda n: ann_score(n, annual), reverse=True)[:PICK_N])
-
-def gen_g3(cand: list, records: list, annual: dict) -> list:
-    dual_fn, _ = _build_dual(cand, records, annual)
-    by_z = {}
-    for zn in [1, 2, 3, 4]:
-        by_z[zn] = sorted([n for n in cand if z_zone(n) == zn], key=dual_fn, reverse=True)
-    pool = by_z[1][:3] + by_z[2][:3] + by_z[3][:3]
-    if len(pool) < PICK_N:
-        seen = set(pool)
-        for n in by_z[4]:
-            if n not in seen:
-                pool.append(n)
-                seen.add(n)
-    pool.sort(key=dual_fn, reverse=True)
-    nums = sorted(pool[:PICK_N])
-    return ensure_consec(nums, cand, dual_fn, annual)
-
 def tail_chi2(annual: dict, pick: int, pool: int) -> float:
     """尾數分佈 vs 均勻的卡方統計量（df=9），由 tailBias 反推"""
     T = annual['periods']
@@ -311,106 +201,6 @@ def tail_chi2(annual: dict, pick: int, pool: int) -> float:
         chi2 += exp * (b / 100.0) ** 2
     return chi2
 
-def gen_g5(cand: list, records: list, annual: dict) -> list:
-    dual_fn, _ = _build_dual(cand, records, annual)
-    # 卡方把關（df=9, α=.05 臨界值16.92）：尾數分佈與均勻無顯著差異時不啟用熱尾強制
-    hot_tails = ([t for t, b in annual['tailBias'].items() if b >= 8]
-                 if tail_chi2(annual, 5, 39) >= 16.92 else [])
-    if not hot_tails:
-        return sorted(sorted(cand, key=dual_fn, reverse=True)[:PICK_N])
-    hot_pool  = sorted([n for n in cand if n % 10 in hot_tails], key=dual_fn, reverse=True)
-    cold_pool = sorted([n for n in cand if n % 10 not in hot_tails], key=dual_fn, reverse=True)
-    hot_picks = hot_pool[:min(PICK_N - 2, len(hot_pool))]
-    hot_set   = set(hot_picks)
-    rest = [n for n in cold_pool if n not in hot_set][:PICK_N - len(hot_picks)]
-    return sorted((hot_picks + rest)[:PICK_N])
-
-def gen_g6(cand: list, records: list, annual: dict) -> list:
-    """G6 遺漏壓力流：cand 依沉寂期數高→低取前 PICK_N（與頁面 genG6/buildGap 一致，同沉寂取小號）。
-    2026-07-19 修正：此前誤留 2026-06-26 改版前的舊算法（年度分60%+動能40%），
-    2026-07-02～07-19 的 PICKLOG G6 紀錄為舊算法所產，評估 G6 時需分段看"""
-    ab = calc_absent(records)
-    return sorted(sorted(cand, key=lambda n: (-ab[n], n))[:PICK_N])
-
-def gen_g8(cand: list, records: list, annual: dict) -> list:
-    rN = min(30, len(records))
-    rf = [0] * 40
-    for r in records[:rN]:
-        for n in r['n']:
-            rf[n] += 1
-    ann_per = annual['periods']
-    def mom_fn(n):
-        e = annual['freq'][n] / ann_per
-        return 0 if e < 0.001 else (rf[n] / rN) / e
-    s3max   = max((ann_score(n, annual) for n in cand), default=0.01)
-    mom_max = max((mom_fn(n)            for n in cand), default=0.01)
-    def dual_fn(n):
-        return (ann_score(n, annual) / s3max) * 60 + (mom_fn(n) / mom_max) * 40
-    top_raw = sorted(cand, key=dual_fn, reverse=True)[:PICK_N]
-    if len(top_raw) < PICK_N:
-        return None
-    return ensure_consec(sorted(top_raw), cand, dual_fn, annual)
-
-def build_return_dist(records: list) -> dict:
-    """全體號碼回歸間隔分佈（records 新到舊）。間隔0=下期就回歸"""
-    dist, last_seen = {}, {}
-    for i, r in enumerate(reversed(records)):
-        for n in r['n']:
-            if n in last_seen:
-                gap = i - last_seen[n] - 1
-                dist[gap] = dist.get(gap, 0) + 1
-            last_seen[n] = i
-    return dist
-
-def gen_g9(records: list, annual: dict) -> list:
-    """G9 回歸熱區：沉寂期數落在歷史回歸排名前3間隔的號碼，dual 分數取前 PICK_N"""
-    dist = build_return_dist(records)
-    top3 = [g for g, _ in sorted(dist.items(), key=lambda x: -x[1])[:3]]
-    ab = calc_absent(records)
-    pool = [n for n in range(1, 40) if ab[n] in top3] or list(range(1, 40))
-    dual_fn, _ = _build_dual(pool, records, annual)
-    return sorted(sorted(pool, key=dual_fn, reverse=True)[:PICK_N])
-
-def lcg_picks(seed: int, num_max: int, k: int) -> list:
-    """Lehmer LCG 選號，與網頁 JS 版 lcgPicks 完全一致（G0 隨機對照組用）"""
-    x = seed % 2147483646 + 1
-    picks = set()
-    while len(picks) < k:
-        x = (x * 48271) % 2147483647
-        picks.add(1 + x % num_max)
-    return sorted(picks)
-
-def avg_gap_per_num(records: list) -> dict:
-    """每號碼的歷史平均回歸間隔（無紀錄者用理論值 39/5）"""
-    tot, cnt, last = {}, {}, {}
-    for i, r in enumerate(reversed(records)):
-        for n in r['n']:
-            if n in last:
-                tot[n] = tot.get(n, 0) + (i - last[n] - 1)
-                cnt[n] = cnt.get(n, 0) + 1
-            last[n] = i
-    return {n: (tot.get(n, 0) / cnt[n] if cnt.get(n) else 39 / 5) for n in range(1, 40)}
-
-def gen_g10(records: list, annual: dict) -> list:
-    """G10 使用者策略（2026-07-03）：回歸熱區（間隔占比>11%）主力 + 2碼超期（沉寂≥2×個別平均間隔）
-    100期回測 0.740/期；與 G9 差異在納入超期信號，供與 G9/G0 對照驗證"""
-    dist = build_return_dist(records)
-    total = sum(dist.values()) or 1
-    hot_gaps = {g for g, c in dist.items() if c / total > 0.11}
-    ab = calc_absent(records)
-    ag = avg_gap_per_num(records)
-    dual_fn, _ = _build_dual(list(range(1, 40)), records, annual)
-    pool_a = sorted([n for n in range(1, 40) if ab[n] in hot_gaps], key=dual_fn, reverse=True)
-    pool_b = sorted([n for n in range(1, 40) if ab[n] >= 2 * ag[n]], key=dual_fn, reverse=True)
-    picks = pool_a[:PICK_N - 2]
-    for src_pool in (pool_b, pool_a[PICK_N - 2:], sorted(range(1, 40), key=dual_fn, reverse=True)):
-        for n in src_pool:
-            if len(picks) >= PICK_N:
-                break
-            if n not in picks:
-                picks.append(n)
-    return sorted(picks[:PICK_N])
-
 def unpop_score(n: int) -> float:
     """冷門度（0~100）：避開大眾熱門簽法——生日範圍(1~31)、月份(1~12)、
     華人幸運號(3,6,8,9,18,28,38)與西方幸運7；尾4因忌諱少人簽反而加分"""
@@ -420,39 +210,6 @@ def unpop_score(n: int) -> float:
     if n % 10 == 4: s += 10
     if n in (3, 6, 7, 8, 9, 18, 28, 38): s -= 25
     return s
-
-def gen_g11(records: list, annual: dict) -> list:
-    """G11 冷門組合（2026-07-15 上線）：dual 分數與冷門度各半加權。
-    誠實揭露：不改變命中機率；目標是避開熱門簽法降低撞號，中獎時
-    分彩金稀釋較少（唯一能改善條件賠付的方向）。保底至少3碼≥32"""
-    pool = list(range(1, 40))
-    dual_fn, _ = _build_dual(pool, records, annual)
-    dmax = max(dual_fn(n) for n in pool) or 0.01
-    umax = max(unpop_score(n) for n in pool)
-    score = lambda n: (dual_fn(n) / dmax) * 50 + (unpop_score(n) / umax) * 50
-    picks = sorted(pool, key=score, reverse=True)[:PICK_N]
-    high = [n for n in picks if n >= 32]
-    if len(high) < 3:
-        subs = sorted([n for n in pool if n >= 32 and n not in picks], key=score, reverse=True)
-        lows = sorted([n for n in picks if n < 32], key=score)
-        for c in subs[:3 - len(high)]:
-            picks.remove(lows.pop(0))
-            picks.append(c)
-    return sorted(picks)
-
-def gen_gc(strategies: dict) -> list:
-    """GC 覆蓋度立柱（2026-07-19 事前註冊）：統計各號碼被多少現役策略
-    圈選（v2 2026-07-21 起含 G0，使用者決定；50 期評估自 v2 重計，
-    此前 v1 不含 G0 的紀錄：539 至 115175、F5 至 11944，評估時分段），
-    覆蓋度高→低取前 10 碼，同票取小號。
-    10 碼基準：均中期望 1.282 碼/期、中≥3星 9.6%；碼數與 8 碼策略不同，
-    滿 50 期評估時只與自身隨機基準比較，不與 8 碼策略直接比。
-    誠實揭露：各策略共用同一批歷史資料，共識≠獨立證據，期望值不變。"""
-    cov = {}
-    for g, nums in strategies.items():
-        for n in nums:
-            cov[n] = cov.get(n, 0) + 1
-    return sorted(sorted(cov), key=lambda n: -cov[n])[:10]
 
 def build_con_stat(records: list) -> dict:
     """馬可夫連動統計（與頁面 buildConStat 一致）：records 新到舊，統計前後期連動"""
@@ -511,36 +268,16 @@ def calc_exclude_zone(records: list) -> list:
     comb_s = lambda n: s2(n) * 0.7 + s3(n) * 0.3
     return sorted(allc, key=lambda n: (-comb_s(n), n))[:EXCL]
 
-def gen_all_predictions(records: list, st_mg: dict) -> dict:
-    annual = build_annual(records)
-    if not annual:
-        return {}
-    ab   = calc_absent(records)
-    cand = [n for n in range(1, 40) if ab[n] < st_mg.get(n, 999)] or list(range(1, 40))
+def gen_pending(records: list) -> dict:
+    """sfg-v1：期號種子 4 組 × 3 碼（2026-08-09 減法重構，取代 10 策略制）。
 
-    # ── 策略淘汰規則（2026-07-15 事前註冊，禁止事後改動）──────────
-    # 1. 新策略上線後累積滿 50 期才可評估；屆時「平均命中 < G0 且
-    #    中2+次數 ≤ G0」→ 移除
-    # 2. dual 分數家族滿 50 期檢查兩兩平均重疊碼數 > 6/8 → 合併留均中較高者
-    # 3. G0 隨機對照組永久保留，不參與淘汰
-    # G2/G4/G7 已於 2026-07-02 依 100 期滾動回測移除（均中低於隨機期望 0.641）
-    strategies = {
-        'G1': gen_g1(cand, annual),
-        'G3': gen_g3(cand, records, annual),
-        'G5': gen_g5(cand, records, annual),
-        'G6': gen_g6(cand, records, annual),
-    }
-    g8 = gen_g8(cand, records, annual)
-    if g8:
-        strategies['G8'] = g8
-    strategies['G9'] = gen_g9(records, annual)
-    strategies['G10'] = gen_g10(records, annual)
-    strategies['G11'] = gen_g11(records, annual)
-    # G0 隨機對照組：以最新期號為種子，作為所有策略的空白對照
-    strategies['G0'] = lcg_picks(records[0]['p'], 39, PICK_N)
-    # GC 覆蓋度立柱 v2：由現役策略＋G0 投票產生，輸出即立柱順序（高→低）
-    strategies['GC'] = gen_gc(strategies)
-    return strategies
+    純函數、可重現：以上期期號當種子，任何人可用 pick_engine.py 重算驗證。
+    規格（PRNG、反熱門過濾 R1-R4、fallback 階梯）全文見 pick_engine.py docstring。
+    舊 10 策略已退役；歷史 PICKLOG 凍結保留，不刪不改。
+    """
+    if not records:
+        return {}
+    return pick_engine.gen_four_groups(GAME, records[0]['p'], records[0]['n'])
 
 
 def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
@@ -554,12 +291,19 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
             continue
         if idx == 0 and base_pending and base_pending.get('strategies'):
             strat, ts, backfill = base_pending['strategies'], base_pending.get('ts', 0), False
+            meta = {k: base_pending[k] for k in ('v', 'algo', 'seed', 'hi') if k in base_pending}
+            if base_pending.get('relaxed'):
+                meta['relaxed'] = base_pending['relaxed']
             excl = base_pending.get('excluded')
         else:
             hist = [r for r in all_records if r['p'] < d['p']]
             if len(hist) < 40:
                 continue
-            strat, ts, backfill = gen_all_predictions(hist, st_mg), int(time.time() * 1000), True
+            core = gen_pending(hist)
+            strat, ts, backfill = core.get('strategies'), int(time.time() * 1000), True
+            meta = {k: core[k] for k in ('v', 'algo', 'seed', 'hi') if k in core}
+            if core.get('relaxed'):
+                meta['relaxed'] = core['relaxed']
             excl = calc_exclude_zone(hist)
         if not strat:
             continue
@@ -573,6 +317,7 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
             'hitNums':    hit_nums,
             'ts':         ts,
         }
+        entry.update(meta)
         if excl:
             entry['excluded'] = excl
             entry['excludedHits'] = len(set(excl) & set(d['n']))
@@ -760,9 +505,10 @@ def update_html(new_draws: list, dry_run: bool = False):
     )
 
     # ── 產生新預測 ───────────────────────────────────────────────
-    new_strategies = gen_all_predictions(all_records, st_mg)
+    core = gen_pending(all_records)
+    new_strategies = core.get('strategies', {})
     new_pending = {
-        'strategies': new_strategies,
+        **core,
         'excluded': calc_exclude_zone(all_records),
         'ts': int(time.time() * 1000),
     }
@@ -794,6 +540,9 @@ def update_html(new_draws: list, dry_run: bool = False):
     )
     msg = f"新增 {new_periods}"
     try:
+        # HOOK: 未來如需「開獎當晚即時本機通知中2+」，在此檢查
+        #   max((e.get('hits') or {}).values() or [0]) >= 2 for e in new_log_entries
+        #   後 osascript 通知；目前推播統一由隔日 10:13 lottery-daily 單一出口發（2026-08-09 拍板）
         subprocess.run(["git", "add", "data_539.js"], cwd=repo, check=True)
         subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "push"], cwd=repo, check=True, capture_output=True)
