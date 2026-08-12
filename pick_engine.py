@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pick_engine — 期號種子可重現選號引擎（sfg-v1）
+pick_engine — 期號種子可重現選號引擎（sfg-v2）＋ fpx-v2 不出牌排除區
 =================================================
 
-事前註冊：2026-08-09（鈞洋拍板之減法重構）。本檔即規格本身，
+事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12（鈞洋拍板）。本檔即規格本身，
 任何人可依下述規則獨立重實作並得到逐位元相同的結果。
 
 目標
@@ -21,7 +21,7 @@ pick_engine — 期號種子可重現選號引擎（sfg-v1）
    在「固定賠率」玩法中僅具紀律價值；
 3. 紀律 —— 每期固定 4 組，控制成本。
 
-規格（sfg-v1）
+規格（sfg-v2；與 v1 的差異＝候選池再排除 fpx-v2 不出牌區＋高號預算）
 --------------
 彩種常數：
     game   POOL_MAX  SALT  號域（zone = n // 10）
@@ -37,7 +37,8 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     全程整數運算；禁用時間、OS 熵源 —— 純函數，同輸入必同輸出。
 
 抽取程序：
-    候選池 P = {1..POOL_MAX} ∖ set(last_draw)      ※ 避開上期＝硬排除
+    候選池 P = {1..POOL_MAX} ∖ set(last_draw) ∖ excluded（fpx-v2 排除區）
+    池 < MIN_POOL 依 (h高→低,深度淺→深,小號) 回補並記 relaxed:"pool"
     高號區門檻 hi 初始 32；若 |{hi..POOL_MAX} ∩ P| < 4 則 hi 每次減 2，
     直到湊滿 4 個高號候選，實際 hi 記入輸出（539/F5 上期全高號之退化保護）。
 
@@ -65,13 +66,14 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     539 / F5 對開出 5 碼；六合對「主 6 碼」，特別號（e 欄）不計。
 
 輸出（BASE_PENDING v2 之核心，excluded/ts 由呼叫端補）：
-    {"v":2, "algo":"sfg-v1", "seed":<last_period>, "forPeriod":<last_period+1>,
+    {"v":2, "algo":"sfg-v2", "seed":<last_period>, "forPeriod":<last_period+1>,
      "hi":<實際門檻>, "relaxed":[...],
      "strategies":{"A":[a,b,c], "B":[...], "C":[...], "D":[...]}}
     ※ forPeriod 僅供顯示；跨年改號（如六合 26/xxx→27/001）時以實際開獎為準。
 
 驗算（給親友）：
-    python3 pick_engine.py 539 115192 "5,11,24,31,32"
+    python3 pick_engine.py 539            # 讀公開 data 檔重算排除區＋四組
+    python3 pick_engine.py 539 115192 "5,11,24,31,32" --excluded "8,15,..."
     python3 pick_engine.py --selftest
 """
 
@@ -89,6 +91,7 @@ GAMES = {
 
 MIN_POOL = 16          # 候選池下限：12 碼＋過濾規則的活動空間
 ATRISK_MIN = 20        # 平坦度深度樣本門檻（與頁面平坦度卡同值）
+MIN_EXCL = 5           # fpx-v2：由最低柱往上收號碼的目標顆數（鈞洋 2026-08-12 拍板「湊滿 5 顆」）
 
 GROUP_RETRY_LIMIT = 300
 
@@ -213,20 +216,22 @@ def _lex_fallback(pool, hi, pool_max):
     return pick([], ordered)
 
 
-# ──────────────────── fpx-v1 不出牌排除區（2026-08-12 事前註冊）────────────────────
+# ──────────────────── fpx-v2 不出牌排除區（2026-08-12 事前註冊）────────────────────
 #
-# 規則（鈞洋 2026-08-12 拍板，取代舊「區間輪動70%＋馬可夫30%固定15碼」制）：
-#   對每個號碼 n，取其目前沉寂深度 g(n)；以全歷史計算「沉寂 g 期的號碼下一期回歸」
-#   的實際機率 h(g) = dist[g] / atRisk(g)（與頁面平坦度檢驗卡完全同一條算式，
-#   atRisk(g) = Σ_{k≥g} dist[k]，樣本 < ATRISK_MIN 的深度視為中性、不給排除資格）。
-#   h(g) < 理論值（draw/pool：539/F5=12.8%、六合=12.2%）的深度 → 該深度上的號碼全數排除。
-#   顆數浮動，不湊固定數。
+# 規則（鈞洋 2026-08-12 拍板；同日的 fpx-v1「低於理論值全排」是對其原意的誤解，
+# v1 存續期間零筆結算即被本版取代，無需分段）：
+#   對平坦度檢驗圖上「低於理論值」的深度，依 h(g) 由低到高（同 h 取深度小者）
+#   逐根收集其上的號碼，**直到累計 ≥ MIN_EXCL(5) 顆為止**——即「距離基準最低的
+#   那幾根柱子」上的號碼進不出牌區。空柱（該深度目前無號碼）照樣消耗名次。
+#   h(g) = dist[g] / atRisk(g)，與平坦度卡完全同一條算式；
+#   atRisk < ATRISK_MIN 的深度樣本太薄，視為中性、不給排除資格。
+#   低於理論值的柱子全收仍不足 MIN_EXCL 時，有多少排多少（不硬湊）。
 #
 # 誠實揭露（不可刪）：本站平坦度卡的結論正是「這些偏離是抽樣噪音」——本規則是
 # 可重現的縮池慣例，不是預測訊號；out-of-sample 追蹤（excludedHits）就是它的裁決台，
 # 預期長期與隨機基準無異。
 #
-# sfg-v2（同日註冊）：選號候選池在 v1 的「避上期」外，再排除本區號碼。
+# sfg-v2（同日註冊）：選號候選池在「避上期」外，再排除本區號碼。
 # 池低於 MIN_POOL 時依 (h 高→低、深度淺→深、號碼小→大) 回補並記 relaxed:"pool"。
 
 def build_return_dist(records):
@@ -255,13 +260,17 @@ def current_gaps(records, pool_max):
 
 
 def flatness_exclude(game, records):
-    """回傳 (excluded 升冪, excl_depths 升冪, readmit_order, h_of_gap)。純函數。"""
+    """fpx-v2：回傳 (excluded 升冪, excl_depths 升冪, readmit_order)。純函數。
+
+    由最低柱往上收號碼直到 ≥ MIN_EXCL 顆；同 h 取深度小者（決定性）。
+    excl_depths 為實際消耗的柱子（含空柱），供頁面平坦度圖 🚫 標記。
+    """
     cfg = GAMES[game]
     theory = cfg["draw"] / cfg["pool_max"]
     dist = build_return_dist(records)
     gaps = current_gaps(records, cfg["pool_max"])
     h_of = {}
-    excl_depths = []
+    below = []  # (h, g, nums)
     for g in range(0, (max(dist) + 1) if dist else 0):
         at_risk = sum(c for k, c in dist.items() if k >= g)
         if at_risk < ATRISK_MIN:
@@ -269,9 +278,16 @@ def flatness_exclude(game, records):
         h = dist.get(g, 0) / at_risk
         h_of[g] = h
         if h < theory:
-            excl_depths.append(g)
-    depth_set = set(excl_depths)
-    excluded = sorted(n for n, g in gaps.items() if g in depth_set)
+            below.append((h, g, sorted(n for n, gg in gaps.items() if gg == g)))
+    below.sort(key=lambda t: (t[0], t[1]))
+    excluded, excl_depths = [], []
+    for h, g, nums in below:
+        excl_depths.append(g)
+        excluded.extend(nums)
+        if len(excluded) >= MIN_EXCL:
+            break
+    excluded.sort()
+    excl_depths.sort()
     # 回補順序：h 最接近理論值者先回（h 高→低）、深度淺→深、小號優先
     readmit = sorted(excluded, key=lambda n: (-h_of.get(gaps[n], theory), gaps[n], n))
     return excluded, excl_depths, readmit
@@ -343,7 +359,7 @@ def gen_pending_core(game, records):
     excl, depths, readmit = flatness_exclude(game, records)
     core = gen_four_groups(game, records[0]["p"], records[0]["n"],
                            excluded=excl, readmit_order=readmit)
-    core["exclAlgo"] = "fpx-v1"
+    core["exclAlgo"] = "fpx-v2"
     core["exclDepths"] = depths
     return core
 

@@ -41,7 +41,7 @@ function structCheck(game,pending,lastDraw){
     if(zs.some(z=>!cov.has(z))) errs.push('號域未全覆蓋');
   }
   // fpx-v1 排除區（2026-08-12）：sfg-v2 選號必須與有效排除區不相交
-  if(pending.exclAlgo==='fpx-v1'){
+  if(/^fpx-v\d/.test(pending.exclAlgo||'')){
     const ex=pending.excluded||[];
     if(new Set(ex).size!==ex.length) errs.push('排除區有重複');
     if(ex.some((n,i)=>i&&ex[i-1]>=n)) errs.push('排除區未升冪');
@@ -124,7 +124,7 @@ function check(game,dataFile,htmlFile,label){
       const mEx=py.match(/^\s+EXCL: \[([\d, ]*)\]/m);
       const gotEx=mEx&&mEx[1].trim()?mEx[1].split(',').map(s=>+s.trim()):[];
       const groupsOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
-      const exOk=r.pend.exclAlgo!=='fpx-v1'||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
+      const exOk=!/^fpx-v\d/.test(r.pend.exclAlgo||'')||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
       recompOk=groupsOk&&exOk;
       parts.push(recompOk?'✅ Python重算一致(組+排除區)':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區'));
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }

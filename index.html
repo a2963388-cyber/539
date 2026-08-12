@@ -1028,14 +1028,14 @@ function renderPick(el){
   </div>
   ${(()=>{
     const P=pendingPick;
-    if(!P||P.exclAlgo!=='fpx-v1'){
+    if(!P||!(P.exclAlgo||'').startsWith('fpx')){
       return (P&&P.excluded&&P.excluded.length)?`<div class="card" style="border-left:4px solid #7c3aed"><h3>🚫 不出牌區（舊制資料）</h3><div style="display:flex;gap:4px;flex-wrap:wrap">${P.excluded.map(n=>ballX(n,'ball-sm')).join('')}</div></div>`:'';
     }
     const ex=P.excluded||[], ds=P.exclDepths||[];
     const TH=(5/39*100).toFixed(1);
     return `<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>🚫 不出牌排除區（fpx-v1｜本期 ${ex.length} 顆，顆數浮動）</h3>
-      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：號碼目前沉寂深度的歷史回歸率 h(g) 低於理論值 ${TH}% → 該深度全數排除。本期排除深度 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
+      <h3>🚫 不出牌排除區（fpx-v2｜本期 ${ex.length} 顆）</h3>
+      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：取平坦度圖上「距基準線最低」的柱子，由低往高收號碼直到湊滿 5 顆（低於理論值 ${TH}% 的柱子才有資格；空柱照樣消耗名次）。本期用到的柱子 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${ex.map(n=>ballX(n,'ball-sm')).join('')}</div>
       ${P.relaxed&&P.relaxed.includes('pool')?`<div style="font-size:.7rem;color:#d97706;margin-bottom:4px">⚠️ 本期排除後候選池低於下限，已依註冊規則回補部分號碼（relaxed:pool）；上列為回補後的有效排除區。</div>`:''}
       <div style="font-size:.7rem;color:var(--muted)">🎯 本期四組選號（sfg-v2）已避開本區。誠實揭露：平坦度檢驗卡自己證明了這些偏離是抽樣噪音——本區是可重現的縮池慣例，不是預測訊號；追蹤頁的 out-of-sample 累積就是它的裁決台，預期長期與隨機基準無異。</div>
@@ -1555,12 +1555,12 @@ function renderTrack(el) {
             <span style="font-size:.72rem">95%CI ${stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—'}</span>
           </div></div>`;
       };
-      const fpx=rows.filter(l=>l.exclAlgo==='fpx-v1');
-      const legacy=rows.filter(l=>l.exclAlgo!=='fpx-v1');
+      const fpx=rows.filter(l=>(l.exclAlgo||'').startsWith('fpx'));
+      const legacy=rows.filter(l=>!(l.exclAlgo||'').startsWith('fpx'));
       return `<div style="margin-top:10px;padding:10px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;font-size:.75rem">
         🎯 <strong>不出牌 out-of-sample</strong>
         <span style="font-size:.7rem;color:var(--muted)">｜開獎落入排除區的碼數；fpx-v1 顆數逐期浮動，期望逐筆計算（顆數×開出數/池）</span>
-        ${seg(fpx,'fpx-v1（現行，2026-08-12 事前註冊）')}
+        ${seg(fpx,'fpx-v2（現行，2026-08-12 事前註冊：最低柱湊滿5顆）')}
         ${seg(legacy,'舊制：區間輪動＋馬可夫固定 15 碼（已退役凍結）')}
       </div>`;
     })()}
@@ -1635,7 +1635,7 @@ function renderTrack(el) {
         </div>
       </div>
       <div style="display:flex;gap:3px;margin-top:2px">${rows.map(r=>`<div style="flex:1;text-align:center;font-size:.58rem;color:var(--muted)">${r.g}</div>`).join('')}</div>
-      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌排除深度 fpx-v1）</div>
+      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌用到的柱子 fpx-v2）</div>
       <div style="font-size:.74rem;padding:7px 10px;background:${outliers<=1?'#f0fdf4':'#fef9c3'};border-radius:6px">
         ${outliers<=1
           ?`✅ <strong>各沉寂深度的回歸機率均貼近理論值</strong>（${rows.length} 個深度僅 ${outliers} 個超出 ±2σ，屬正常波動）——「沉寂越久越該回歸」在本資料中<strong>不成立</strong>，這是每期獨立開獎的直接證據。號碼不會「記得」自己沉寂多久。`
