@@ -77,15 +77,18 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
 
 from itertools import combinations
 
-ALGO = "sfg-v1"
+ALGO = "sfg-v2"   # v1（2026-08-09）：避上期；v2（2026-08-12）：再避 fpx-v1 不出牌排除區
 MOD = 2147483647
 MULT = 48271
 
 GAMES = {
-    "539": {"pool_max": 39, "salt": 1, "zones": (0, 1, 2, 3)},
-    "f5":  {"pool_max": 39, "salt": 2, "zones": (0, 1, 2, 3)},
-    "m6":  {"pool_max": 49, "salt": 3, "zones": (0, 1, 2, 3, 4)},
+    "539": {"pool_max": 39, "salt": 1, "zones": (0, 1, 2, 3), "draw": 5},
+    "f5":  {"pool_max": 39, "salt": 2, "zones": (0, 1, 2, 3), "draw": 5},
+    "m6":  {"pool_max": 49, "salt": 3, "zones": (0, 1, 2, 3, 4), "draw": 6},
 }
+
+MIN_POOL = 16          # 候選池下限：12 碼＋過濾規則的活動空間
+ATRISK_MIN = 20        # 平坦度深度樣本門檻（與頁面平坦度卡同值）
 
 GROUP_RETRY_LIMIT = 300
 
@@ -123,8 +126,14 @@ def group_ok(trio, hi, relax_zone):
     return True
 
 
-def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None):
-    """自數列連續取號湊一組；違規放棄重抽（同一條數列），上限 GROUP_RETRY_LIMIT。"""
+def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
+                max_high=3):
+    """自數列連續取號湊一組；違規放棄重抽（同一條數列），上限 GROUP_RETRY_LIMIT。
+
+    max_high＝本組最多可佔用的高號（≥hi）數。高號預算（sfg-v2 補強，2026-08-12）：
+    排除區會壓縮高號供給，若前面的組貪婪吃掉多顆高號，後面的組會 R1 無解
+    而整階梯崩落到字典序兜底（實測：高號恰 4 顆時組1 佔 2 顆 → 組3 無高號可用）。
+    """
     for _ in range(GROUP_RETRY_LIMIT):
         trio = []
         # 單組取號也設護欄，避免池過小時空轉
@@ -138,6 +147,8 @@ def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None):
         if len(trio) < 3:
             return None
         trio.sort()
+        if sum(1 for n in trio if n >= hi) > max_high:
+            continue
         if not group_ok(trio, hi, relax_zone):
             continue
         if require_zones and not require_zones.issubset({zone_of(n) for n in trio}):
@@ -152,8 +163,12 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
     pool_max = game_cfg["pool_max"]
     used = set()
     groups = []
-    for _ in range(4):
-        trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone)
+    for gi in range(4):
+        # 高號預算：本組佔用數 ≤ 剩餘高號 −（之後還有幾組，各需至少 1 顆）
+        highs_left = sum(1 for n in pool if n >= hi and n not in used)
+        max_high = max(1, highs_left - (3 - gi))
+        trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone,
+                           max_high=max_high)
         if trio is None:
             return None
         groups.append(trio)
@@ -198,11 +213,90 @@ def _lex_fallback(pool, hi, pool_max):
     return pick([], ordered)
 
 
-def gen_four_groups(game, last_period, last_draw):
-    """主入口。純函數：同 (game, last_period, last_draw) 必得同結果。"""
+# ──────────────────── fpx-v1 不出牌排除區（2026-08-12 事前註冊）────────────────────
+#
+# 規則（鈞洋 2026-08-12 拍板，取代舊「區間輪動70%＋馬可夫30%固定15碼」制）：
+#   對每個號碼 n，取其目前沉寂深度 g(n)；以全歷史計算「沉寂 g 期的號碼下一期回歸」
+#   的實際機率 h(g) = dist[g] / atRisk(g)（與頁面平坦度檢驗卡完全同一條算式，
+#   atRisk(g) = Σ_{k≥g} dist[k]，樣本 < ATRISK_MIN 的深度視為中性、不給排除資格）。
+#   h(g) < 理論值（draw/pool：539/F5=12.8%、六合=12.2%）的深度 → 該深度上的號碼全數排除。
+#   顆數浮動，不湊固定數。
+#
+# 誠實揭露（不可刪）：本站平坦度卡的結論正是「這些偏離是抽樣噪音」——本規則是
+# 可重現的縮池慣例，不是預測訊號；out-of-sample 追蹤（excludedHits）就是它的裁決台，
+# 預期長期與隨機基準無異。
+#
+# sfg-v2（同日註冊）：選號候選池在 v1 的「避上期」外，再排除本區號碼。
+# 池低於 MIN_POOL 時依 (h 高→低、深度淺→深、號碼小→大) 回補並記 relaxed:"pool"。
+
+def build_return_dist(records):
+    """回歸間隔分佈（與頁面 buildReturnDist 同邏輯；records 新→舊）。"""
+    dist = {}
+    for i in range(len(records) - 1, -1, -1):
+        for n in records[i]["n"]:
+            for j in range(i - 1, -1, -1):
+                if n in records[j]["n"]:
+                    gap = i - j - 1
+                    dist[gap] = dist.get(gap, 0) + 1
+                    break
+    return dist
+
+
+def current_gaps(records, pool_max):
+    """每號目前沉寂深度：最新一期含 n → 0；從未出現 → len(records)。"""
+    gaps = {}
+    for n in range(1, pool_max + 1):
+        gaps[n] = len(records)
+        for i, r in enumerate(records):
+            if n in r["n"]:
+                gaps[n] = i
+                break
+    return gaps
+
+
+def flatness_exclude(game, records):
+    """回傳 (excluded 升冪, excl_depths 升冪, readmit_order, h_of_gap)。純函數。"""
+    cfg = GAMES[game]
+    theory = cfg["draw"] / cfg["pool_max"]
+    dist = build_return_dist(records)
+    gaps = current_gaps(records, cfg["pool_max"])
+    h_of = {}
+    excl_depths = []
+    for g in range(0, (max(dist) + 1) if dist else 0):
+        at_risk = sum(c for k, c in dist.items() if k >= g)
+        if at_risk < ATRISK_MIN:
+            break  # 更深的深度樣本更薄，一律中性
+        h = dist.get(g, 0) / at_risk
+        h_of[g] = h
+        if h < theory:
+            excl_depths.append(g)
+    depth_set = set(excl_depths)
+    excluded = sorted(n for n, g in gaps.items() if g in depth_set)
+    # 回補順序：h 最接近理論值者先回（h 高→低）、深度淺→深、小號優先
+    readmit = sorted(excluded, key=lambda n: (-h_of.get(gaps[n], theory), gaps[n], n))
+    return excluded, excl_depths, readmit
+
+
+def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=()):
+    """主入口。純函數：同輸入必得同結果。
+
+    sfg-v2（2026-08-12）：候選池＝全池 ∖ 上期 ∖ excluded（fpx-v1 不出牌排除區）。
+    池 < MIN_POOL 時依 readmit_order 回補並記 relaxed:"pool"。
+    回傳的 excluded 為**有效**排除區（原排除 ∖ 已回補），選號保證與其不相交。
+    """
     cfg = GAMES[game]
     pool_max = cfg["pool_max"]
-    pool = set(range(1, pool_max + 1)) - set(last_draw)
+    pool = set(range(1, pool_max + 1)) - set(last_draw) - set(excluded)
+
+    pool_relaxed = False
+    eff_excluded = [n for n in excluded if n not in last_draw]
+    for n in readmit_order:
+        if len(pool) >= MIN_POOL:
+            break
+        if n in eff_excluded:
+            pool.add(n)
+            eff_excluded.remove(n)
+            pool_relaxed = True
 
     hi = 32
     while len([n for n in pool if n >= hi]) < 4 and hi > 2:
@@ -225,6 +319,8 @@ def gen_four_groups(game, last_period, last_draw):
         if groups is None:  # 數學上不應發生；發生即資料異常
             raise RuntimeError(f"pick_engine: {game} 期 {last_period} 無合法解")
 
+    if pool_relaxed:
+        relaxed = relaxed + ["pool"]
     return {
         "v": 2,
         "algo": ALGO,
@@ -233,7 +329,23 @@ def gen_four_groups(game, last_period, last_draw):
         "hi": hi,
         "relaxed": relaxed,
         "strategies": {k: g for k, g in zip("ABCD", groups)},
+        "excluded": sorted(eff_excluded),
     }
+
+
+def gen_pending_core(game, records):
+    """一站式：fpx-v1 排除 ＋ sfg-v2 四組。fetch 與 CLI 的共同入口。
+
+    records 新→舊（同 BASE_REC）。回傳 pending 核心（呼叫端補 ts）。
+    """
+    if not records:
+        return {}
+    excl, depths, readmit = flatness_exclude(game, records)
+    core = gen_four_groups(game, records[0]["p"], records[0]["n"],
+                           excluded=excl, readmit_order=readmit)
+    core["exclAlgo"] = "fpx-v1"
+    core["exclDepths"] = depths
+    return core
 
 
 # ──────────────────────────── 驗證與 CLI ────────────────────────────
@@ -277,10 +389,15 @@ def _verify_output(game, last_draw, res):
     if "cover" not in res["relaxed"]:
         if set(cfg["zones"]) - {zone_of(n) for n in flat}:
             errs.append("違反 G2 覆蓋")
+    # sfg-v2：選號必須與有效排除區不相交（回補過的號碼已不在 excluded 內）
+    hit_excl = set(flat) & set(res.get("excluded", []))
+    if hit_excl:
+        errs.append(f"選號含排除區號碼 {sorted(hit_excl)}")
     return errs
 
 
 def selftest():
+    """三彩種全歷史回放：確定性 ×3、規則全過（含排除區不相交）、fallback 統計。"""
     ok = True
     for game in ("539", "f5", "m6"):
         recs = _read_records(game)
@@ -288,48 +405,83 @@ def selftest():
             print(f"[{game}] 讀不到足夠歷史，跳過")
             ok = False
             continue
-        fallback_n = 0
-        for r in recs:
-            res1 = gen_four_groups(game, r["p"], r["n"])
-            res2 = gen_four_groups(game, r["p"], r["n"])
-            res3 = gen_four_groups(game, r["p"], r["n"])
-            if not (res1 == res2 == res3):
-                print(f"[{game}] 期 {r['p']} 確定性失敗！")
+        fallback_n = pool_relax_n = lex_n = 0
+        excl_sizes = []
+        for i in range(len(recs)):
+            hist = recs[i:]
+            if len(hist) < 40:
+                break  # 與 build_log_entries 的 backfill 門檻一致
+            res1 = gen_pending_core(game, hist)
+            res2 = gen_pending_core(game, hist)
+            if res1 != res2:
+                print(f"[{game}] 期 {hist[0]['p']} 確定性失敗！")
                 ok = False
-            errs = _verify_output(game, r["n"], res1)
+            errs = _verify_output(game, hist[0]["n"], res1)
             if errs:
-                print(f"[{game}] 期 {r['p']} 規則違規: {errs}")
+                print(f"[{game}] 期 {hist[0]['p']} 規則違規: {errs}")
                 ok = False
+            excl_sizes.append(len(res1["excluded"]))
             if res1["relaxed"]:
                 fallback_n += 1
-        print(f"[{game}] {len(recs)} 期回放完成，fallback 觸發 {fallback_n} 次"
-              f"（{fallback_n/len(recs)*100:.1f}%）")
+            if "pool" in res1["relaxed"]:
+                pool_relax_n += 1
+            if "lex" in res1["relaxed"]:
+                lex_n += 1
+        n = len(excl_sizes)
+        print(f"[{game}] {n} 期回放完成｜排除區大小 min/中位/max = "
+              f"{min(excl_sizes)}/{sorted(excl_sizes)[n//2]}/{max(excl_sizes)}"
+              f"｜fallback {fallback_n}（pool 回補 {pool_relax_n}、lex {lex_n}）")
     print("SELFTEST", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
+
+
+def _print_core(game, res):
+    cfg = GAMES[game]
+    s0 = derive_seed(res["seed"], cfg["salt"])
+    print(f"seed 導出: ({res['seed']} × 1000003 + {cfg['salt']}) mod 2147483646 + 1 = {s0}")
+    print(f"hi={res['hi']}  relaxed={res['relaxed']}  exclAlgo={res.get('exclAlgo', '—')}")
+    print(f"  EXCLDEPTHS: {res.get('exclDepths', [])}")
+    print(f"  EXCL: {res.get('excluded', [])}")
+    for k, g in res["strategies"].items():
+        print(f"  {k}: {g}")
 
 
 def main(argv):
     if len(argv) >= 2 and argv[1] == "--selftest":
         return selftest()
-    if len(argv) != 4:
-        print(__doc__)
-        print("用法: pick_engine.py <539|f5|m6> <上期期號> \"<上期號碼,逗號分隔>\"")
-        return 2
-    game, last_period = argv[1], int(argv[2])
-    last_draw = [int(x) for x in argv[3].replace(" ", "").split(",")]
-    cfg = GAMES[game]
-    s0 = derive_seed(last_period, cfg["salt"])
-    res = gen_four_groups(game, last_period, last_draw)
-    print(f"seed 導出: ({last_period} × 1000003 + {cfg['salt']}) mod 2147483646 + 1 = {s0}")
-    rng = Lehmer(s0)
-    preview = [rng.next_num(cfg["pool_max"]) for _ in range(8)]
-    print(f"LCG 前 8 個取號: {preview}")
-    print(f"hi={res['hi']}  relaxed={res['relaxed']}")
-    for k, g in res["strategies"].items():
-        print(f"  {k}: {g}")
-    errs = _verify_output(game, last_draw, res)
-    print("規則自檢:", "全過 ✅" if not errs else errs)
-    return 0
+
+    # 自動模式：pick_engine.py <game> —— 讀本地 data_*.js 重算排除區＋四組
+    # （BASE_REC 為公開資料，親友可下載同一份檔案完整驗算）
+    if len(argv) == 2 and argv[1] in GAMES:
+        game = argv[1]
+        recs = _read_records(game)
+        res = gen_pending_core(game, recs)
+        _print_core(game, res)
+        errs = _verify_output(game, recs[0]["n"], res)
+        print("規則自檢:", "全過 ✅" if not errs else errs)
+        return 0
+
+    # 手動模式：pick_engine.py <game> <上期期號> "<上期號碼>" [--excluded "n,n,..."]
+    if len(argv) in (4, 6):
+        game, last_period = argv[1], int(argv[2])
+        last_draw = [int(x) for x in argv[3].replace(" ", "").split(",")]
+        excl = []
+        if len(argv) == 6 and argv[4] == "--excluded":
+            excl = [int(x) for x in argv[5].replace(" ", "").split(",") if x]
+        res = gen_four_groups(game, last_period, last_draw, excluded=excl,
+                              readmit_order=sorted(excl))
+        _print_core(game, res)
+        errs = _verify_output(game, last_draw, res)
+        print("規則自檢:", "全過 ✅" if not errs else errs)
+        if not excl:
+            print("（未給 --excluded：此為無排除區的裸算，與正式發布可能不同）")
+        return 0
+
+    print(__doc__)
+    print("用法: pick_engine.py <539|f5|m6>                      # 讀 data 檔完整重算（驗算用）")
+    print("      pick_engine.py <game> <上期期號> \"<上期號碼>\" [--excluded \"n,...\"]")
+    print("      pick_engine.py --selftest")
+    return 2
 
 
 if __name__ == "__main__":

@@ -363,64 +363,7 @@ function cs(n) {
 }
 const byCS = arr => [...arr].sort((a,b)=>cs(b)-cs(a));
 
-function calcExcludeZone() {
-  const POOL=49,PICK=6,EXCL=15;
-  const all=Array.from({length:POOL},(_,i)=>i+1);
-  const ZLbl={1:'一區 1–12',2:'二區 13–24',3:'三區 25–36',4:'四區 37–49'};
-  if(rec.length<5) return{exclude:all.slice(0,EXCL),score:()=>50,S1:()=>50,S2:()=>50,S3:()=>50,btAvoid:null,theorAvoid:((POOL-EXCL)/POOL*100).toFixed(1),BT:0,zHeat:{1:1,2:1,3:1,4:1},hotZone:1,ZLbl,markovTop:[],lastNums:[]};
-  // S1: 近期高頻
-  const f5=new Array(POOL+1).fill(0),f10=new Array(POOL+1).fill(0),f20=new Array(POOL+1).fill(0);
-  rec.slice(0,Math.min(5,rec.length)).forEach(r=>r.n.forEach(n=>f5[n]++));
-  rec.slice(0,Math.min(10,rec.length)).forEach(r=>r.n.forEach(n=>f10[n]++));
-  rec.slice(0,Math.min(20,rec.length)).forEach(r=>r.n.forEach(n=>f20[n]++));
-  const fr=n=>f5[n]*3.0+f10[n]*1.5+f20[n]*0.8;
-  const frMax=Math.max(...all.map(fr),0.01);
-  const S1=n=>fr(n)/frMax*100;
-  // S2: 區間輪動
-  const zoneSz={1:0,2:0,3:0,4:0};all.forEach(n=>zoneSz[Z(n)]++);
-  const rNz=Math.min(10,rec.length);const zCnt={1:0,2:0,3:0,4:0};
-  rec.slice(0,rNz).forEach(r=>r.n.forEach(n=>zCnt[Z(n)]++));
-  const zHeat={};[1,2,3,4].forEach(z=>{const e=rNz*PICK*zoneSz[z]/POOL;zHeat[z]=e>0?+(zCnt[z]/e).toFixed(2):1;});
-  const zHMax=Math.max(...Object.values(zHeat),0.01);
-  const S2=n=>zHeat[Z(n)]/zHMax*100;
-  // S3: 馬可夫鏈（反向）
-  const lastNums=rec[0]?.n||[];
-  const mfSum=new Array(POOL+1).fill(0);let mfOpp=0;
-  lastNums.forEach(prev=>{if(conStat[prev]&&conStat[prev].total>0){const t=conStat[prev].total;all.forEach(m=>{mfSum[m]+=((conStat[prev].followedBy[m]||0)+1)/(t+POOL);});mfOpp++;}});
-  const mfRaw=n=>mfOpp>0?mfSum[n]/mfOpp:0;
-  const mfMax=Math.max(...all.map(mfRaw),0.001);
-  const S3=n=>(1-mfRaw(n)/mfMax)*100;
-  // 加權合成 40%/30%/30%
-  const combined=n=>S2(n)*0.7+S3(n)*0.3;  // 馬可夫樣本不足，Laplace收縮+降權
-  const cMax=Math.max(...all.map(combined),0.01);
-  const exclude=[...all].sort((a,b)=>combined(b)-combined(a)).slice(0,EXCL);
-  // 回測：walk-forward，與線上排除同公式（S2 區間輪動70% + S3 反馬可夫30%）
-  // 2026-07-20 修正：舊版回測用「近頻55%+區間45%」，測的不是線上模型
-  const BT=Math.min(30,rec.length-21);let outside=0,total=0;
-  for(let i=0;i<BT;i++){
-    const past=rec.slice(i+1);
-    const rNzb=Math.min(10,past.length);const bzCnt={1:0,2:0,3:0,4:0};
-    past.slice(0,rNzb).forEach(r=>r.n.forEach(n=>bzCnt[Z(n)]++));
-    const bzH={};[1,2,3,4].forEach(z=>{const e=rNzb*PICK*zoneSz[z]/POOL;bzH[z]=e>0?+(bzCnt[z]/e).toFixed(2):1;});
-    const bzMax=Math.max(...Object.values(bzH),0.01);
-    const bS2=n=>bzH[Z(n)]/bzMax*100;
-    const bCon=buildConStat(past);
-    const bLast=past[0]?.n||[];
-    const bmf=new Array(POOL+1).fill(0);let bOpp=0;
-    bLast.forEach(prev=>{if(bCon[prev]&&bCon[prev].total>0){const t=bCon[prev].total;all.forEach(m=>{bmf[m]+=((bCon[prev].followedBy[m]||0)+1)/(t+POOL);});bOpp++;}});
-    const bRaw=n=>bOpp>0?bmf[n]/bOpp:0;
-    const bMax=Math.max(...all.map(bRaw),0.001);
-    const bS3=n=>(1-bRaw(n)/bMax)*100;
-    const bsc=n=>bS2(n)*0.7+bS3(n)*0.3;
-    const ex=[...all].sort((a,b)=>bsc(b)-bsc(a)).slice(0,EXCL);
-    rec[i].n.forEach(n=>{if(!ex.includes(n))outside++;total++;});
-  }
-  const btAvoid=BT>0?(outside/total*100).toFixed(1):null;
-  const theorAvoid=((POOL-EXCL)/POOL*100).toFixed(1);
-  const hotZone=+Object.entries(zHeat).sort((a,b)=>b[1]-a[1])[0][0];
-  const markovTop=mfOpp>0?[...all].sort((a,b)=>mfRaw(b)-mfRaw(a)).slice(0,5):[];
-  return{exclude,score:n=>Math.round(combined(n)/cMax*100),S1,S2,S3,btAvoid,theorAvoid,BT,zHeat,hotZone,ZLbl,markovTop,lastNums};
-}
+
 
 // 雙信號合成預測：S3年度熱度(60%) + S4近期動能(40%)
 // 回測驗證：逾期壓力~1.09×（無效）已完全剔除；動能×年度雙信號達1.66×隨機
@@ -1054,26 +997,18 @@ function renderPick(el){
     </div>
   </div>
   ${(()=>{
-    const{exclude,score,S1,S2,S3,btAvoid,theorAvoid,BT,zHeat,hotZone,ZLbl,markovTop,lastNums}=calcExcludeZone();
-    const lift=btAvoid?(+btAvoid-+theorAvoid).toFixed(1):null;
-    return`<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>🚫 不出牌預測區（建議排除 15 號｜剩餘 34 號為主力池）</h3>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-size:.72rem">
-        <span style="background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:5px;font-weight:600">區間輪動 70%</span>
-        <span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:5px;font-weight:600">馬可夫鏈 30%·Laplace收縮</span>
-      </div>
-      <div style="font-size:.73rem;padding:5px 8px;background:#f0f9ff;border-radius:6px;margin-bottom:6px">
-        📊 區間輪動：<strong>${ZLbl[hotZone]}</strong> 過熱（理論值 ${(zHeat[hotZone]*100).toFixed(0)}%）→ 此區號碼排除加權
-        <span style="color:var(--muted);margin-left:6px">${[1,2,3,4].map(z=>`Z${z}:${zHeat[z].toFixed(2)}×`).join(' ')}</span>
-      </div>
-      ${lastNums.length?`<div style="font-size:.73rem;padding:5px 8px;background:#fffbeb;border-radius:6px;margin-bottom:8px">
-        🔗 馬可夫：上期 ${lastNums.map(n=>`<b>${f2(n)}</b>`).join(' ')} → 次期常跟出：${markovTop.map(n=>`<b style="color:#d97706">${f2(n)}</b>`).join(' ')}（此6號排除權重已降低）
-      </div>`:''}
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-        ${exclude.map(n=>{const s=score(n),s2=Math.round(S2(n)),s3=Math.round(S3(n));return`<div style="text-align:center"><span class="ball ball-sm" style="background:#7c3aed;color:#fff;opacity:${0.45+s*0.0055}">${f2(n)}</span><div style="font-size:.58rem;color:#7c3aed;margin-top:1px;font-weight:700">${s}</div><div style="font-size:.5rem;color:#94a3b8;line-height:1.3">${s2}·${s3}</div></div>`;}).join('')}
-      </div>
-      <div style="font-size:.68rem;color:var(--muted);margin-bottom:4px">綜合分（區間·馬可夫），越高→下期不出機率越大</div>
-      ${btAvoid?`<div style="font-size:.72rem;color:#7c3aed;font-weight:600">walk-forward回測(${BT}期，與線上同公式)：主力池命中率 ${btAvoid}%（隨機基準 ${theorAvoid}%，${+lift>=0?'+':''}${lift}%）</div><div style="font-size:.68rem;color:#d97706;margin-top:2px">誠實揭露：長期回測與隨機基準無統計差異——此區的價值是縮小池子方便選號，不是預測；真實成績自動累積於「🏆 中獎追蹤」的不出牌 out-of-sample 卡</div>`:''}
+    const P=pendingPick;
+    if(!P||P.exclAlgo!=='fpx-v1'){
+      return (P&&P.excluded&&P.excluded.length)?`<div class="card" style="border-left:4px solid #7c3aed"><h3>🚫 不出牌區（舊制資料）</h3><div style="display:flex;gap:4px;flex-wrap:wrap">${P.excluded.map(n=>ballX(n,'ball-sm')).join('')}</div></div>`:'';
+    }
+    const ex=P.excluded||[], ds=P.exclDepths||[];
+    const TH=(6/49*100).toFixed(1);
+    return `<div class="card" style="border-left:4px solid #7c3aed">
+      <h3>🚫 不出牌排除區（fpx-v1｜本期 ${ex.length} 顆，顆數浮動）</h3>
+      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：號碼目前沉寂深度的歷史回歸率 h(g) 低於理論值 ${TH}% → 該深度全數排除。本期排除深度 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${ex.map(n=>ballX(n,'ball-sm')).join('')}</div>
+      ${P.relaxed&&P.relaxed.includes('pool')?`<div style="font-size:.7rem;color:#d97706;margin-bottom:4px">⚠️ 本期排除後候選池低於下限，已依註冊規則回補部分號碼（relaxed:pool）；上列為回補後的有效排除區。</div>`:''}
+      <div style="font-size:.7rem;color:var(--muted)">🎯 本期四組選號（sfg-v2）已避開本區。誠實揭露：平坦度檢驗卡自己證明了這些偏離是抽樣噪音——本區是可重現的縮池慣例，不是預測訊號；追蹤頁的 out-of-sample 累積就是它的裁決台，預期長期與隨機基準無異。</div>
     </div>`;
   })()}
   ${(()=>{
@@ -1552,25 +1487,33 @@ function renderTrack(el) {
       </table></div>
       <div style="font-size:.7rem;color:var(--muted);margin-top:6px">隨機期望 ${E2} 碼/組/期（3×${PICK}/${POOL}）｜超額＝平均−期望｜誠實揭露：長期而言超額應收斂於 0——本表存在的目的正是驗證這件事</div>`}
     ${(()=>{
-      const avRows=pickLog.filter(l=>l.excludedHits!=null&&l.excluded);
-      if(!avRows.length) return '';
-      const n=avRows.length,EXCLsz=avRows[0].excluded.length;
-      const randExpEx=+(PICK*EXCLsz/POOL).toFixed(2);
-      const avgEx=+(avRows.reduce((a,l)=>a+l.excludedHits,0)/n).toFixed(2);
-      const eff=+(randExpEx-avgEx).toFixed(2);
-      const effClr=eff>0.1?'#16a34a':eff>-0.1?'#d97706':'#dc2626';
-      const stat=n>=3?statsFromVals(avRows.map(l=>l.excludedHits),randExpEx):null;
-      const pStr=stat?`p=${stat.pval}`:'—';
-      const ciStr=stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—';
+      const rows=pickLog.filter(l=>l.excludedHits!=null&&l.excluded);
+      if(!rows.length) return '';
+      const seg=(rs,label)=>{
+        if(!rs.length) return '';
+        const n=rs.length;
+        const expOf=l=>PICK*l.excluded.length/POOL;
+        const avg=+(rs.reduce((a,l)=>a+l.excludedHits,0)/n).toFixed(2);
+        const expAvg=+(rs.reduce((a,l)=>a+expOf(l),0)/n).toFixed(2);
+        const eff=+(expAvg-avg).toFixed(2);
+        const effClr=eff>0.1?'#16a34a':eff>-0.1?'#d97706':'#dc2626';
+        const stat=n>=3?statsFromVals(rs.map(l=>l.excludedHits-expOf(l)),0):null;
+        return `<div style="margin-top:6px"><strong>${label}</strong>（${n} 期）
+          <div style="margin-top:3px;display:flex;gap:14px;flex-wrap:wrap">
+            <span>平均落入 <strong style="color:${effClr}">${avg}</strong> 碼</span>
+            <span>逐筆期望均值 ${expAvg}</span>
+            <span>排除成效 <strong style="color:${effClr}">${eff>=0?'+':''}${eff}</strong>（${eff>0.05?'✅ 少於':eff<-0.05?'❌ 多於':'⚠️ 貼平'}隨機）</span>
+            <span>p：<strong>${stat?`p=${stat.pval}`:'—'}</strong></span>
+            <span style="font-size:.72rem">95%CI ${stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—'}</span>
+          </div></div>`;
+      };
+      const fpx=rows.filter(l=>l.exclAlgo==='fpx-v1');
+      const legacy=rows.filter(l=>l.exclAlgo!=='fpx-v1');
       return `<div style="margin-top:10px;padding:10px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;font-size:.75rem">
-        🎯 <strong>不出牌預測區 out-of-sample（${n}期）</strong>
-        <span style="font-size:.7rem;color:var(--muted)">｜開獎號碼落入排除區個數，越低越好｜隨機基準 ${randExpEx}碼/期（${EXCLsz}/${POOL}×${PICK}）</span><br>
-        <div style="margin-top:5px;display:flex;gap:16px;flex-wrap:wrap">
-          <span>平均落入：<strong style="color:${effClr}">${avgEx}</strong>碼</span>
-          <span>排除成效：<strong style="color:${effClr}">${eff>=0?'+':''}${eff}</strong>（${eff>0.05?'✅ 少':eff<-0.05?'❌ 多':'⚠️ 持平'}隨機）</span>
-          <span>p值：<strong>${pStr}</strong></span>
-          <span>95%CI：<strong style="font-size:.72rem">${ciStr}</strong></span>
-        </div>
+        🎯 <strong>不出牌 out-of-sample</strong>
+        <span style="font-size:.7rem;color:var(--muted)">｜開獎落入排除區的碼數；fpx-v1 顆數逐期浮動，期望逐筆計算（顆數×開出數/池）</span>
+        ${seg(fpx,'fpx-v1（現行，2026-08-12 事前註冊）')}
+        ${seg(legacy,'舊制：區間輪動＋馬可夫固定 15 碼（已退役凍結）')}
       </div>`;
     })()}
   </div>
@@ -1628,6 +1571,7 @@ function renderTrack(el) {
       }
       if(rows.length<4) return '<div style="color:var(--muted);font-size:.82rem">資料不足</div>';
       const outliers=rows.filter(r=>r.h<r.lo||r.h>r.hi).length;
+      const exD=new Set((pendingPick&&pendingPick.exclDepths)||[]);
       const maxH=Math.max(...rows.map(r=>r.h),expP)*1.25;
       const barH=v=>Math.max(2,v/maxH*90);
       return `<div style="position:relative;height:112px">
@@ -1636,14 +1580,14 @@ function renderTrack(el) {
         ${rows.map(r=>{
           const out=r.h<r.lo||r.h>r.hi;
           return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
-            <span style="font-size:.56rem;color:${out?'#dc2626':'var(--muted)'}">${r.h.toFixed(0)}</span>
+            ${exD.has(r.g)?'<span style="font-size:.6rem" title="本期不出牌排除深度">🚫</span>':''}<span style="font-size:.56rem;color:${out?'#dc2626':'var(--muted)'}">${r.h.toFixed(0)}</span>
             <div style="width:72%;background:${out?'#dc2626':'#7c3aed'};opacity:.8;height:${barH(r.h)}px;border-radius:3px 3px 0 0"></div>
           </div>`;
         }).join('')}
         </div>
       </div>
       <div style="display:flex;gap:3px;margin-top:2px">${rows.map(r=>`<div style="flex:1;text-align:center;font-size:.58rem;color:var(--muted)">${r.g}</div>`).join('')}</div>
-      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%）</div>
+      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌排除深度 fpx-v1）</div>
       <div style="font-size:.74rem;padding:7px 10px;background:${outliers<=1?'#f0fdf4':'#fef9c3'};border-radius:6px">
         ${outliers<=1
           ?`✅ <strong>各沉寂深度的回歸機率均貼近理論值</strong>（${rows.length} 個深度僅 ${outliers} 個超出 ±2σ，屬正常波動）——「沉寂越久越該回歸」在本資料中<strong>不成立</strong>，這是每期獨立開獎的直接證據。號碼不會「記得」自己沉寂多久。`
@@ -1849,7 +1793,7 @@ function addDraw(){
       hitNums[k] = matched;
     }
     const excHits=pendingPick.excluded?sorted.filter(n=>pendingPick.excluded.includes(n)).length:null;
-    pickLog.unshift({period:pv, ...(pendingPick.v?{v:pendingPick.v,algo:pendingPick.algo,seed:pendingPick.seed,hi:pendingPick.hi}:{}), strategies:pendingPick.strategies, result:sorted, hits, hitNums, excludedHits:excHits, excluded:pendingPick.excluded, ts:pendingPick.ts});
+    pickLog.unshift({period:pv, ...(pendingPick.v?{v:pendingPick.v,algo:pendingPick.algo,seed:pendingPick.seed,hi:pendingPick.hi,...(pendingPick.exclAlgo?{exclAlgo:pendingPick.exclAlgo}:{})}:{}), strategies:pendingPick.strategies, result:sorted, hits, hitNums, excludedHits:excHits, excluded:pendingPick.excluded, ts:pendingPick.ts});
     pendingPick = null;
     savePickLog();
   }

@@ -40,6 +40,16 @@ function structCheck(game,pending,lastDraw){
     const cov=new Set(flat.map(zone));
     if(zs.some(z=>!cov.has(z))) errs.push('號域未全覆蓋');
   }
+  // fpx-v1 排除區（2026-08-12）：sfg-v2 選號必須與有效排除區不相交
+  if(pending.exclAlgo==='fpx-v1'){
+    const ex=pending.excluded||[];
+    if(new Set(ex).size!==ex.length) errs.push('排除區有重複');
+    if(ex.some((n,i)=>i&&ex[i-1]>=n)) errs.push('排除區未升冪');
+    if(ex.some(n=>n<1||n>GAMES[game].pool)) errs.push('排除區超出號池');
+    const hitEx=flat.filter(n=>ex.includes(n));
+    if(hitEx.length) errs.push(`選號含排除區 ${hitEx}`);
+    if(!Array.isArray(pending.exclDepths)) errs.push('缺 exclDepths');
+  }
   return errs;
 }
 
@@ -107,11 +117,16 @@ function check(game,dataFile,htmlFile,label){
   let recompOk=null;
   if(recompute&&r.pend&&r.pend.v===2){
     try{
-      const py=cp.execFileSync('/usr/bin/python3',[dir+'pick_engine.py',game,String(r.pend.seed),r.lastDraw.join(',')],{encoding:'utf8'});
+      // sfg-v2 起用 auto 模式（讀同一份 data 檔重算排除區＋四組）——完整三方一致
+      const py=cp.execFileSync('/usr/bin/python3',[dir+'pick_engine.py',game],{encoding:'utf8'});
       const got={};
       for(const m of py.matchAll(/^\s+([A-D]): \[([\d, ]+)\]/gm)) got[m[1]]=m[2].split(',').map(s=>+s.trim());
-      recompOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
-      parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+JSON.stringify(got));
+      const mEx=py.match(/^\s+EXCL: \[([\d, ]*)\]/m);
+      const gotEx=mEx&&mEx[1].trim()?mEx[1].split(',').map(s=>+s.trim()):[];
+      const groupsOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
+      const exOk=r.pend.exclAlgo!=='fpx-v1'||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
+      recompOk=groupsOk&&exOk;
+      parts.push(recompOk?'✅ Python重算一致(組+排除區)':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區'));
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }
   }
   const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false);

@@ -183,13 +183,6 @@ def calc_absent(records: list) -> dict:
     return ab
 
 
-# ── 預測邏輯（JS G1–G8 + G7 的 Python 移植版）────────────────
-def z_zone(n: int) -> int:
-    if n <= 9: return 1
-    if n <= 19: return 2
-    if n <= 29: return 3
-    return 4
-
 def tail_chi2(annual: dict, pick: int, pool: int) -> float:
     """尾數分佈 vs 均勻的卡方統計量（df=9），由 tailBias 反推"""
     T = annual['periods']
@@ -211,73 +204,18 @@ def unpop_score(n: int) -> float:
     if n in (3, 6, 7, 8, 9, 18, 28, 38): s -= 25
     return s
 
-def build_con_stat(records: list) -> dict:
-    """馬可夫連動統計（與頁面 buildConStat 一致）：records 新到舊，統計前後期連動"""
-    s = {}
-    ordered = list(reversed(records))
-    for i in range(len(ordered) - 1):
-        prev, curr = ordered[i]['n'], ordered[i + 1]['n']
-        for n in prev:
-            d = s.setdefault(n, {'total': 0, 'followedBy': {}})
-            d['total'] += 1
-            for m in curr:
-                d['followedBy'][m] = d['followedBy'].get(m, 0) + 1
-    return s
-
-def _tofixed2(x: float) -> float:
-    """模擬 JS toFixed(2)（四捨五入 half-up），確保與頁面同結果"""
-    from decimal import Decimal, ROUND_HALF_UP
-    return float(Decimal(repr(x)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-
-def calc_exclude_zone(records: list) -> list:
-    """不出牌預測區（與頁面 calcExcludeZone 排除邏輯一致）：
-    S2 區間輪動 70%＋S3 反馬可夫 30%，取分數最高 15 碼為建議排除。
-    2026-07-20 誠實揭露：三系統 walk-forward 回測與隨機基準無統計差異，
-    此區價值是縮池輔助非預測；記入 pending/PICKLOG 供 out-of-sample 追蹤"""
-    POOL, PICK, EXCL = 39, 5, 15
-    allc = list(range(1, POOL + 1))
-    if len(records) < 5:
-        return allc[:EXCL]
-    zone_sz = {}
-    for n in allc:
-        zone_sz[z_zone(n)] = zone_sz.get(z_zone(n), 0) + 1
-    rnz = min(10, len(records))
-    z_cnt = {1: 0, 2: 0, 3: 0, 4: 0}
-    for r in records[:rnz]:
-        for n in r['n']:
-            z_cnt[z_zone(n)] += 1
-    z_heat = {}
-    for z in (1, 2, 3, 4):
-        e = rnz * PICK * zone_sz[z] / POOL
-        z_heat[z] = _tofixed2(z_cnt[z] / e) if e > 0 else 1
-    zh_max = max(max(z_heat.values()), 0.01)
-    s2 = lambda n: z_heat[z_zone(n)] / zh_max * 100
-    con = build_con_stat(records)
-    mf = {n: 0.0 for n in allc}
-    opp = 0
-    for prev in records[0]['n']:
-        c = con.get(prev)
-        if c and c['total'] > 0:
-            t = c['total']
-            for m in allc:
-                mf[m] += (c['followedBy'].get(m, 0) + 1) / (t + POOL)
-            opp += 1
-    raw = (lambda n: mf[n] / opp) if opp else (lambda n: 0.0)
-    mmax = max(max(raw(n) for n in allc), 0.001)
-    s3 = lambda n: (1 - raw(n) / mmax) * 100
-    comb_s = lambda n: s2(n) * 0.7 + s3(n) * 0.3
-    return sorted(allc, key=lambda n: (-comb_s(n), n))[:EXCL]
-
 def gen_pending(records: list) -> dict:
-    """sfg-v1：期號種子 4 組 × 3 碼（2026-08-09 減法重構，取代 10 策略制）。
+    """sfg-v2 四組×3碼 ＋ fpx-v1 不出牌排除區（2026-08-12 事前註冊，皆在 pick_engine）。
 
-    純函數、可重現：以上期期號當種子，任何人可用 pick_engine.py 重算驗證。
-    規格（PRNG、反熱門過濾 R1-R4、fallback 階梯）全文見 pick_engine.py docstring。
-    舊 10 策略已退役；歷史 PICKLOG 凍結保留，不刪不改。
+    v2 與 v1 的差異：候選池除避上期外，再排除 fpx-v1 排除區（排除顆數浮動，
+    ＝「沉寂深度的歷史回歸率低於理論值」的號碼；顆數不再固定 15）。
+    規格全文與驗算 CLI 見 pick_engine.py；排除區已含在回傳的 excluded 欄位。
+    誠實揭露：平坦度卡自己證明這些偏離是噪音——排除區是縮池慣例非預測，
+    excludedHits 追蹤就是裁決台。
     """
     if not records:
         return {}
-    return pick_engine.gen_four_groups(GAME, records[0]['p'], records[0]['n'])
+    return pick_engine.gen_pending_core(GAME, records)
 
 
 def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
@@ -291,7 +229,7 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
             continue
         if idx == 0 and base_pending and base_pending.get('strategies'):
             strat, ts, backfill = base_pending['strategies'], base_pending.get('ts', 0), False
-            meta = {k: base_pending[k] for k in ('v', 'algo', 'seed', 'hi') if k in base_pending}
+            meta = {k: base_pending[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo') if k in base_pending}
             if base_pending.get('relaxed'):
                 meta['relaxed'] = base_pending['relaxed']
             excl = base_pending.get('excluded')
@@ -301,10 +239,10 @@ def build_log_entries(new_sorted: list, base_pending, base_picklog: list,
                 continue
             core = gen_pending(hist)
             strat, ts, backfill = core.get('strategies'), int(time.time() * 1000), True
-            meta = {k: core[k] for k in ('v', 'algo', 'seed', 'hi') if k in core}
+            meta = {k: core[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo') if k in core}
             if core.get('relaxed'):
                 meta['relaxed'] = core['relaxed']
-            excl = calc_exclude_zone(hist)
+            excl = core.get('excluded')
         if not strat:
             continue
         hit_nums = {g: sorted(set(nums) & set(d['n'])) for g, nums in strat.items()}
@@ -508,8 +446,7 @@ def update_html(new_draws: list, dry_run: bool = False):
     core = gen_pending(all_records)
     new_strategies = core.get('strategies', {})
     new_pending = {
-        **core,
-        'excluded': calc_exclude_zone(all_records),
+        **core,           # sfg-v2 已含 excluded / exclDepths / exclAlgo
         'ts': int(time.time() * 1000),
     }
 
