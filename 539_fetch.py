@@ -205,13 +205,14 @@ def unpop_score(n: int) -> float:
     return s
 
 def gen_pending(records: list) -> dict:
-    """sfg-v2 四組×3碼 ＋ fpx-v1 不出牌排除區（2026-08-12 事前註冊，皆在 pick_engine）。
+    """sfg-v4 四組×3碼（2026-08-17 事前註冊，規格全文在 pick_engine.py）。
 
-    v2 與 v1 的差異：候選池除避上期外，再排除 fpx-v1 排除區（排除顆數浮動，
-    ＝「沉寂深度的歷史回歸率低於理論值」的號碼；顆數不再固定 15）。
-    規格全文與驗算 CLI 見 pick_engine.py；排除區已含在回傳的 excluded 欄位。
-    誠實揭露：平坦度卡自己證明這些偏離是噪音——排除區是縮池慣例非預測，
-    excludedHits 追蹤就是裁決台。
+    🔴 v4：**不出牌排除區（fpx）已廢除**，候選池＝全池。
+    廢除理由是它被自己的資料否決了——2026-08-16 全歷史回測顯示排除區號碼的
+    開出率與隨機無異（T3 六個檢定全不顯著），且因絕對門檻而正在自我失效
+    （長窗 87~97% 期數為空）。詳見 BACKTEST_REGISTRY.md 與 pick_engine 的 v4 變更紀錄。
+    ⇒ 回傳的 core 不再含 excluded / exclAlgo / exclDepths。
+    歷史 PICKLOG 的 excludedHits 原樣保留供審計，頁面分段統計照舊。
     """
     if not records:
         return {}
@@ -461,7 +462,7 @@ def update_html(new_draws: list, dry_run: bool = False,
         core = dict(base_pending)
     new_strategies = core.get('strategies', {})
     new_pending = {
-        **core,           # sfg-v2 已含 excluded / exclDepths / exclAlgo
+        **core,           # sfg-v4：core 已不含 excluded/exclDepths/exclAlgo（fpx 已廢除）
         'ts': core.get('ts') or int(time.time() * 1000),
     }
 

@@ -20,7 +20,9 @@ const GAMES={ '539':{pool:39,zones:[0,1,2,3]}, 'f5':{pool:39,zones:[0,1,2,3]}, '
 function structCheck(game,pending,lastDraw){
   const errs=[];
   if(!pending) return ['無 BASE_PENDING'];
-  if(pending.v!==2&&pending.v!==3) return null;     // 更舊格式：跳過結構驗規（相容期）
+  // 🔴 勿寫死版號：原為 v!==2&&v!==3，每次改版都得記得回來加數字，
+  // 忘了就「靜默跳過全部結構驗規」——保護消失且不會有人發現。2026-08-17 改下限判定。
+  if(!(pending.v>=2)) return null;                  // 更舊格式：跳過結構驗規（相容期）
   // sfg-v3（2026-08-16）：解除「避上期」、R1 由逐組改為全域 G3 高號合計。
   // 舊 v2 的 BASE_PENDING 仍須照舊規驗，故分版而非直接改寫。
   const v3=pending.v>=3;
@@ -122,20 +124,41 @@ function check(game,dataFile,htmlFile,label){
   parts.push(errs.length?`❌ 腳本錯誤:${errs.join('|')}`:'✅ 腳本零錯誤');
   parts.push(r.missing.length?`❌ 顯示缺號:${r.missing.join(',')}`:'✅ 顯示=發布');
   if(struct===null) parts.push('ℹ️ 舊格式 pending（相容期，跳過結構驗規）');
-  else parts.push(struct.length?`❌ 結構:${struct.join('|')}`:'✅ v2 結構合規');
+  else parts.push(struct.length?`❌ 結構:${struct.join('|')}`
+                               :`✅ v${r.pend.v} 結構合規`);
   let recompOk=null;
-  if(recompute&&r.pend&&r.pend.v===2){
+  // 🔴 同樣勿寫死版號：原為 v===2，故 **v3 的 pending 從未被重算比對過**
+  // （它顯示的 ✅ 只是因為整段被跳過）。2026-08-17 修正為下限判定。
+  if(recompute&&r.pend&&r.pend.v>=2){
     try{
-      // sfg-v2 起用 auto 模式（讀同一份 data 檔重算排除區＋四組）——完整三方一致
+      // sfg-v2 起用 auto 模式（讀同一份 data 檔重算四組）——完整三方一致
       const py=cp.execFileSync('/usr/bin/python3',[dir+'pick_engine.py',game],{encoding:'utf8'});
-      const got={};
-      for(const m of py.matchAll(/^\s+([A-D]): \[([\d, ]+)\]/gm)) got[m[1]]=m[2].split(',').map(s=>+s.trim());
-      const mEx=py.match(/^\s+EXCL: \[([\d, ]*)\]/m);
-      const gotEx=mEx&&mEx[1].trim()?mEx[1].split(',').map(s=>+s.trim()):[];
-      const groupsOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
-      const exOk=!/^fpx-v\d/.test(r.pend.exclAlgo||'')||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
-      recompOk=groupsOk&&exOk;
-      parts.push(recompOk?'✅ Python重算一致(組+排除區)':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區'));
+      // 🔴 跨版本判定（2026-08-17）：演算法改版後，未開獎彩種的 BASE_PENDING 仍是舊版
+      //    （改版閘門保護、update_html 只在有新開獎時執行），此時重算必然不一致，
+      //    那是**制度正常運作**不是故障。舊版寫法會在每次改版當天讓 verify 紅一片，
+      //    誤報比漏報更傷 —— 警報一旦不可信就沒人看了。
+      const mAlgo=py.match(/^v=\d+\s+algo=(\S+)/m);
+      const curAlgo=mAlgo?mAlgo[1]:null;
+      if(curAlgo&&r.pend.algo&&curAlgo!==r.pend.algo){
+        parts.push(`ℹ️ 跨版本：pending ${r.pend.algo} / 引擎 ${curAlgo}`
+                  +`（改版只往前生效，待下次開獎後自動同步，跳過重算比對）`);
+        // ⚠️ 但「跳過」不可以變成永久盲點：pending 每次開獎都會重算成新版，
+        //    若長期停在舊版，代表 fetch 沒在跑或改版閘門卡住了，那才是真故障。
+        const days=(Date.now()-(r.pend.ts||0))/86400000;
+        if(r.pend.ts&&days>7){
+          parts.push(`❌ 但此 pending 已 ${days.toFixed(0)} 天未更新 —— 跨版本不該持續這麼久，請查 fetch`);
+          recompOk=false;
+        }
+      }else{
+        const got={};
+        for(const m of py.matchAll(/^\s+([A-D]): \[([\d, ]+)\]/gm)) got[m[1]]=m[2].split(',').map(s=>+s.trim());
+        const mEx=py.match(/^\s+EXCL: \[([\d, ]*)\]/m);
+        const gotEx=mEx&&mEx[1].trim()?mEx[1].split(',').map(s=>+s.trim()):[];
+        const groupsOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
+        const exOk=!/^fpx-v\d/.test(r.pend.exclAlgo||'')||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
+        recompOk=groupsOk&&exOk;
+        parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區'));
+      }
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }
   }
   const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false);

@@ -1,2 +1,10 @@
 cron.log
 .DS_Store
+
+# 回測中間產物（2026-08-17）：可由腳本完整重生，不進版控
+#   history_*.json（已版控） → build_backtest_data.py → backtest_data_*.json
+#                            → backtest.py → backtest_v3_results.json
+# 只有「規格、腳本、結論、報告」進版控；原始逐期資料 9.5MB 進了公開 repo
+# 只會讓每次改動都存一份完整副本，而且對驗算者沒有幫助（他們該自己跑一遍）。
+backtest_data_*.json
+backtest_v3_results.json

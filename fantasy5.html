@@ -993,6 +993,21 @@ function renderPick(el){
   ${(()=>{
     const P=pendingPick;
     if(!P||!(P.exclAlgo||'').startsWith('fpx')){
+      // sfg-v4（2026-08-17）：不出牌排除區已廢除。留一張說明卡，讓看慣這張卡的人
+      // 知道它是「被拿掉了」而不是「壞了」——制度改了要講，這是誠實揭露的一部分。
+      if(P&&P.v>=4) return `<div class="card" style="border-left:4px solid #94a3b8">
+        <h3>🚫 不出牌排除區　已於 ${P.algo} 廢除</h3>
+        <div style="font-size:.75rem;color:var(--muted);line-height:1.75">
+        2026-08-17 起取消，候選池恢復為全池。<strong>理由是它被自己的資料否決了</strong>：
+        全歷史回測（539 5441 期／F5 6301 期／六合 2086 期）顯示排除區裡的號碼，
+        開出機率與隨機挑的號碼<strong>沒有差別</strong>（六個檢定全部不顯著，
+        六合 14.32% vs 理論 14.29%、p=0.96）；而且它正在自我失效——判定門檻是固定值，
+        歷史越長越容易挑到「深度很大但上面根本沒有號碼」的柱子，
+        近期已有 87~97% 的期數排除區是空的。
+        <br>一個沒有效果、又會隨時間無聲改變行為的規則，留著只會讓「可重現」變成假的，
+        所以拿掉。<strong>拿掉不影響中獎機率</strong>——回測中「有排除區」與「無排除區」
+        兩條對照線並無顯著差異。
+        </div></div>`;
       return (P&&P.excluded&&P.excluded.length)?`<div class="card" style="border-left:4px solid #7c3aed"><h3>🚫 不出牌區（舊制資料）</h3><div style="display:flex;gap:4px;flex-wrap:wrap">${P.excluded.map(n=>ballX(n,'ball-sm')).join('')}</div></div>`:'';
     }
     const ex=P.excluded||[], ds=P.exclDepths||[];
@@ -1397,8 +1412,8 @@ function renderTrack(el) {
   const gNames = {G1:'📅年度熱號(停)',G2:'⚡近期動能',G3:'⚖️均衡區間(停)',G4:'🌡️冷轉熱',G5:'🎯熱尾優先',G6:'⏳遺漏壓力(停)',G7:'📡雙信號(停)',G8:'🎰年度+動能(停)',G9:'🔁回歸熱區',G10:'🧬回歸+超期',G11:'🧊冷門組合',GC:'🗳️覆蓋立柱',G0:'🎲隨機對照'};
   const gLabel = k => gNames[k] || (k+' 組');
   // 新制（v2＝4組×3碼）與舊制（10策略×8碼）分流統計：混算是無意義數字
-  const v2Log  = pickLog.filter(l=>l.v===2 && l.hits);
-  const oldLog = pickLog.filter(l=>l.v!==2 && l.hits);
+  const v2Log  = pickLog.filter(l=>l.v>=2 && l.hits);
+  const oldLog = pickLog.filter(l=>!(l.v>=2) && l.hits);
   const E2 = +(3*PICK/POOL).toFixed(3);   // 每組 3 碼隨機期望
   const v2Keys = [...new Set(v2Log.flatMap(l=>Object.keys(l.hits)))].sort();
   const v2Rows = v2Keys.map(k=>{
@@ -1419,7 +1434,7 @@ function renderTrack(el) {
   const P=pendingPick;
   const pendHTML = (P&&P.strategies) ?
     `<div class="alert alert-ok">
-      ✅ <strong>本期已自動發布${P.v===2?`（種子 ${P.seed}，可重算驗證）`:''}，開獎後自動結算</strong>
+      ✅ <strong>本期已自動發布${P.v>=2?`（種子 ${P.seed}，可重算驗證）`:''}，開獎後自動結算</strong>
       <div style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">
         ${Object.entries(P.strategies).map(([k,nums])=>
           `<div style="background:#fff;border-radius:6px;padding:6px;font-size:.76rem">
@@ -1438,7 +1453,7 @@ function renderTrack(el) {
       const bestG=l.hits?(Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0]:'';
       return `<div style="border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${l.v===2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
+          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
           <span style="font-size:.75rem">開出 ${(l.result||[]).map(f2).join(' ')}</span>
           <span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">最佳 ${bestG?gLabel(bestG):'—'} ${maxH}碼</span>
         </div>

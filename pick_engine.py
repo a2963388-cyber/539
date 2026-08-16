@@ -1,12 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pick_engine — 期號種子可重現選號引擎（sfg-v3）＋ fpx-v3 不出牌排除區
+pick_engine — 期號種子可重現選號引擎（sfg-v4）
 =================================================
 
 事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12、
-         **sfg-v3/fpx-v3 2026-08-16**（皆鈞洋拍板）。本檔即規格本身，
-任何人可依下述規則獨立重實作並得到逐位元相同的結果。
+         sfg-v3/fpx-v3 2026-08-16、**sfg-v4 2026-08-17**（皆鈞洋拍板）。
+本檔即規格本身，任何人可依下述規則獨立重實作並得到逐位元相同的結果。
+
+═══ v4 變更紀錄（2026-08-17，鈞洋拍板；只往前生效，不回頭重算歷史）═══
+
+  **廢除 fpx 不出牌排除區。候選池＝全池，不再扣除任何號碼。**
+
+  理由（全部來自 2026-08-16 全歷史回測，見 BACKTEST_REGISTRY.md）：
+    1. **它沒有預測價值**：T3 六個檢定全部不顯著。
+       六合 v4 排除區命中率 14.32% vs 理論 14.29%（p=0.96）——
+       排除區裡的號碼，開出機率與隨機挑的號碼**一模一樣**。
+    2. **它已經在自己失效**：ATRISK_MIN=20 是絕對門檻，歷史越長越深的柱子
+       越容易達標，而深度 40+ 的柱子上幾乎沒號碼 ⇒ 排除區趨向恆空。
+       長窗（≥1000 期）為空的比例已達 539 93%／F5 97%／六合 87%，
+       且 fetch 的 all_records 只增不減，此趨勢不可逆。
+    3. **留著是負債**：一個沒有效果、又會隨時間無聲改變行為的隱性參數，
+       違背本系統「可重現、事前註冊」的核心精神。
+    4. **拿掉不影響命中率**：回測對照線 B2（無排除區）與 S3（有排除區）
+       在三彩種皆無顯著差異（T2，Holm 校正後全部不顯著）。
+
+  ⚠️ 這會**改變選號結果** —— 候選池變了，PRNG 路徑就跟著變。
+     故列為 v4 而非 v3 的小修，且只往前生效：舊 PICKLOG 原樣保留供審計。
+
+  ※ `flatness_exclude()` 函式**保留但已退役**，只供回測與歷史審計使用，
+    產線路徑（gen_pending_core）不再呼叫它。
+  ※ 「N 不出」投注玩法的相關結論見 ~/Documents/mark6/（回測證實
+    用 fpx 邏輯挑號與隨機挑無異，該玩法期望值完全由賠率決定）。
 
 目標
 ----
@@ -49,6 +74,51 @@ pick_engine — 期號種子可重現選號引擎（sfg-v3）＋ fpx-v3 不出�
         F5 5.61→1.76、六合 5.39→0.88 顆；且有 28.9% / 35.5% / 41.0%
         的期數排除區為 **0 顆**（最低兩根柱子上無號碼）。
         即本規則多數時候近乎不作用 —— 這是已知且接受的後果。
+
+═══ 全歷史回測結果（2026-08-16，事前註冊見 BACKTEST_REGISTRY.md）═══
+539 5441 期／F5 6301 期／六合 2086 期，五條對照線，Holm 校正 30 次檢定。
+可偵測相對效果：539 ±2.04%、F5 ±1.90%、六合 ±3.39%（2 SD）。
+**p > 0.05 的意思是「排除了大於上述幅度的效果」，不是「證明沒有差異」。**
+
+  [T1] 過濾規則（R2/R3/R4/G2/G3）淨效果：**六個檢定全部不顯著**
+       對照組 B1 ＝ 同種子同數列但關閉全部規則，故 S−B1 即規則的純效果。
+       ⇒ 規則沒有扣分，sfg-v3 可安心續用。
+
+  [T3] 排除區命中率：**六個檢定全部不顯著**（539 v3 12.36% vs 理論 12.82%，p=0.75；
+       六合 v4 14.32% vs 理論 14.29%，p=0.96 —— 六合用**出現口徑** 7/49）
+       ⇒ fpx 無預測價值，與本檔下方「預期長期與隨機基準無異」的事前宣告一致。
+
+  [「N 不出」實測] 2026-08-16 鈞洋提問而加測（backtest_notout.py，六合 2086 期）：
+       選 10 碼賭「全部不出」（判定含特碼），三種挑法全部不顯著 ——
+       fpx-主6 18.75%(p=0.33)／fpx-含特碼 17.60%(p=0.74)／隨機 17.98%(p=0.95)，
+       理論 17.906%。**用 fpx 邏輯挑跟隨機亂挑沒有差別**；把特碼納入 dist/gaps
+       計算也沒有改善。⇒ 該玩法期望值**完全由賠率決定**，保本淨賠率 4.585。
+       ⚠️ 效力只能偵測 ±9.4% 相對效果。
+       ⚠️ 若誤用「特碼不計」算，會得到 23.331%、保本賠率僅 3.286 ——
+         **賠率落在 3.29~4.58 之間會看起來正期望，實際是負的。**
+
+  [T4] 號碼入選均勻度：539/F5**極度顯著**（χ²≈1762/1996, df=38），六合正常（χ²=35）。
+       診斷：**G3 的直接數學後果，不是缺陷**。539/F5 的 pool=39，≥32 只有 8 個號碼
+       要供應「12 碼至少 3 顆高號」⇒ 32-39 入選率被推到均勻值的 **132%**、
+       1-31 壓到 92%，最多/最少比 1.58×。六合 pool=49、≥32 有 18 顆，壓力分散故正常。
+       對照組 B1 在三彩種都完全均勻（χ²=7.2/5.2/17.2, p=1.0000）⇒ PRNG 本身無偏。
+       ※ 此偏斜正是 G3 的目的（偏離生日區 1-31 降撞號），且 T1 證明不影響命中率。
+         記此數字是為了讓它成為「已知且刻意」，而不是「沒人算過」。
+
+  [T2] 539 出現 p_adj=0.038 的顯著正向 → 依 §5 事前承諾「先假設是 bug」追查，
+       判定為 **PRNG 路徑偶然**：同一份真實排除區換 20 個 salt，均差分佈以 0 為中心
+       （+0.00046 ± 0.00264），產線 salt 在三彩種排名 1/11/11（隨機散佈）；
+       且 539 與 F5 規則完全相同僅 salt 不同，F5 的 z 只有 −0.17。
+       **沒有發現 bug，也沒有發現規律。** 複驗：backtest_diagnostics.py
+
+  🔴 [已知待決] fpx-v3 隨歷史累積而失效：ATRISK_MIN=20 是**絕對**門檻，歷史越長
+       越深的柱子越容易達標，而深度 40+ 的柱子上幾乎不會有號碼 ⇒ 排除區趨向恆空。
+       實測長窗（≥1000 期）空的比例：539 93%／F5 97%／六合 87%。
+       且 fetch 的 all_records 只增不減（539_fetch.py:409），此趨勢不可逆。
+       ※ 上面 v3 註冊的 1.44/1.76/0.88 顆是用**平均窗長僅 119/147/181 期**的回放算的，
+         產線實際窗口從未處在該狀態 —— 註冊數字從第一天起就低估了衰減。
+       候選解 fpx-v4（門檻改 max(20, 5%×總樣本)）已回測驗證可使規模長短窗穩定，
+       但 T3 顯示 v3/v4 皆無預測價值 ⇒ **修好的是穩定性，不是效果**。尚未拍板進產線。
 
 規格（sfg-v3）
 --------------
@@ -101,8 +171,20 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
         永不放寬：12 碼不重複、G3 高號合計（有 hi 降階）、R2、R3
         最終兜底 relaxed+=["lex"]：對 P 升冪、以字典序回溯枚舉取最小合法解。
 
-兌獎口徑（由 build_log_entries 沿用執行）：
-    539 / F5 對開出 5 碼；六合對「主 6 碼」，特別號（e 欄）不計。
+🔴 六合彩有**兩個不同口徑，絕不可混用**（2026-08-16 鈞洋澄清）：
+
+  [兌獎] 特別號**不計**，只對主 6 碼。539 / F5 對開出 5 碼。
+         → 本口徑**正確且維持不動**，build_log_entries 照舊。
+         一組 3 碼全中 C(6,3)/C(49,3) ≈ 1/921。
+
+  [出現] 特別號**要計**，主 6 碼 ＋ 特碼共 7 碼。
+         → 用於判斷「這個號碼到底有沒有開出」，即**不出牌／排除區的命中判定**。
+         鈞洋原話：「特碼必須有算，是要給不出牌方案知道的」。
+         單碼出現率 7/49 = 14.29%（不是兌獎的 6/49 = 12.24%）。
+
+  ⚠️ 目前 fpx 的 dist／gaps 仍只吃主 6 碼（本檔 build_return_dist／current_gaps），
+     即排除區的「沉寂深度」統計尚未含特碼。是否改用 7 碼待拍板 ——
+     實測改了也沒有改善（見下方「N 不出」回測）。
 
 輸出（BASE_PENDING v3 之核心，ts 由呼叫端補）：
     {"v":3, "algo":"sfg-v3", "seed":<last_period>, "forPeriod":<last_period+1>,
@@ -119,7 +201,9 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
 
 from itertools import combinations
 
-ALGO = "sfg-v3"   # v1（08-09）避上期；v2（08-12）加 fpx 排除區；v3（08-16）解除避上期＋R1 改全域
+ALGO = "sfg-v4"   # v1(08-09)避上期；v2(08-12)加 fpx 排除區；v3(08-16)解除避上期+R1改全域；
+                  # v4(08-17)廢除 fpx 排除區（回測證實無預測價值且正在自我失效）
+ALGO_V = 4        # 寫進 BASE_PENDING 的 v 欄位；勿在別處寫死版號（見 verify_consistency.js 的坑）
 MOD = 2147483647
 MULT = 48271
 
@@ -281,7 +365,12 @@ def _lex_fallback(pool, hi, pool_max):
     return pick([], ordered)
 
 
-# ──────────────────── fpx-v3 不出牌排除區（2026-08-16 事前註冊）────────────────────
+# ═══════ fpx-v3 不出牌排除區 —— 🔴 2026-08-17 已廢除（sfg-v4），以下保留供審計 ═══════
+#
+# ⚠️ 產線路徑（gen_pending_core）**不再呼叫本區任何函式**。
+#    保留原因：①歷史 PICKLOG 的 excluded/excludedHits 需要本規格才能解讀
+#              ②backtest.py / backtest_notout.py 仍用它做對照組
+#    廢除理由見本檔開頭「v4 變更紀錄」。**不要再把它接回產線。**
 #
 # 規則（鈞洋 2026-08-16 拍板，取代 v2）：
 #   對平坦度檢驗圖上「低於理論值」的深度，依 h(g) 由低到高（同 h 取深度小者）
@@ -405,8 +494,8 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
 
     if pool_relaxed:
         relaxed = relaxed + ["pool"]
-    return {
-        "v": 3,
+    out = {
+        "v": ALGO_V,
         "algo": ALGO,
         "seed": last_period,
         "forPeriod": last_period + 1,
@@ -414,23 +503,26 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
         "minHigh": MIN_HIGH_TOTAL,
         "relaxed": relaxed,
         "strategies": {k: g for k, g in zip("ABCD", groups)},
-        "excluded": sorted(eff_excluded),
     }
+    # sfg-v4：排除區已廢除，產線恆為空 ⇒ 不輸出該欄位，頁面的排除區卡自動消失。
+    # 回測仍可傳 excluded 進來模擬舊制，此時照常輸出以供比對。
+    if eff_excluded:
+        out["excluded"] = sorted(eff_excluded)
+    return out
 
 
 def gen_pending_core(game, records):
-    """一站式：fpx-v3 排除 ＋ sfg-v3 四組。fetch 與 CLI 的共同入口。
+    """一站式入口（fetch 與 CLI 共用）。**sfg-v4：候選池＝全池，無排除區。**
 
     records 新→舊（同 BASE_REC）。回傳 pending 核心（呼叫端補 ts）。
+
+    v4（2026-08-17）起不再呼叫 flatness_exclude —— 回測證實排除區無預測價值
+    （T3 六個檢定全不顯著）且正在自我失效（長窗 93~97% 期數為空）。
+    詳見本檔開頭「v4 變更紀錄」與 BACKTEST_REGISTRY.md。
     """
     if not records:
         return {}
-    excl, depths, readmit = flatness_exclude(game, records)
-    core = gen_four_groups(game, records[0]["p"], records[0]["n"],
-                           excluded=excl, readmit_order=readmit)
-    core["exclAlgo"] = "fpx-v3"
-    core["exclDepths"] = depths
-    return core
+    return gen_four_groups(game, records[0]["p"], records[0]["n"])
 
 
 # ──────────────────────────── 驗證與 CLI ────────────────────────────
@@ -483,7 +575,11 @@ def _verify_output(game, last_draw, res):
 
 
 def selftest():
-    """三彩種全歷史回放：確定性 ×3、規則全過（含排除區不相交）、fallback 統計。"""
+    """三彩種全歷史回放：確定性 ×3、規則全過、fallback 統計。
+
+    sfg-v4：排除區已廢除，故不再統計排除區大小；改為驗證產線輸出**確實不含**
+    excluded/exclAlgo/exclDepths —— 若哪天有人把 fpx 接回產線，這裡會立刻擋下。
+    """
     ok = True
     for game in ("539", "f5", "m6"):
         recs = _read_records(game)
@@ -491,8 +587,7 @@ def selftest():
             print(f"[{game}] 讀不到足夠歷史，跳過")
             ok = False
             continue
-        fallback_n = pool_relax_n = lex_n = 0
-        excl_sizes = []
+        fallback_n = pool_relax_n = lex_n = n = 0
         for i in range(len(recs)):
             hist = recs[i:]
             if len(hist) < 40:
@@ -506,16 +601,22 @@ def selftest():
             if errs:
                 print(f"[{game}] 期 {hist[0]['p']} 規則違規: {errs}")
                 ok = False
-            excl_sizes.append(len(res1["excluded"]))
+            # v4 閘門：產線輸出不得再帶排除區欄位
+            stale = [k for k in ("excluded", "exclAlgo", "exclDepths") if k in res1]
+            if stale:
+                print(f"[{game}] 期 {hist[0]['p']} 🔴 v4 仍輸出排除區欄位 {stale}")
+                ok = False
+            if res1.get("v") != ALGO_V:
+                print(f"[{game}] 期 {hist[0]['p']} 版號 {res1.get('v')} != {ALGO_V}")
+                ok = False
+            n += 1
             if res1["relaxed"]:
                 fallback_n += 1
             if "pool" in res1["relaxed"]:
                 pool_relax_n += 1
             if "lex" in res1["relaxed"]:
                 lex_n += 1
-        n = len(excl_sizes)
-        print(f"[{game}] {n} 期回放完成｜排除區大小 min/中位/max = "
-              f"{min(excl_sizes)}/{sorted(excl_sizes)[n//2]}/{max(excl_sizes)}"
+        print(f"[{game}] {n} 期回放完成｜{ALGO}（無排除區）"
               f"｜fallback {fallback_n}（pool 回補 {pool_relax_n}、lex {lex_n}）")
     print("SELFTEST", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
@@ -525,9 +626,12 @@ def _print_core(game, res):
     cfg = GAMES[game]
     s0 = derive_seed(res["seed"], cfg["salt"])
     print(f"seed 導出: ({res['seed']} × 1000003 + {cfg['salt']}) mod 2147483646 + 1 = {s0}")
-    print(f"hi={res['hi']}  relaxed={res['relaxed']}  exclAlgo={res.get('exclAlgo', '—')}")
-    print(f"  EXCLDEPTHS: {res.get('exclDepths', [])}")
-    print(f"  EXCL: {res.get('excluded', [])}")
+    print(f"v={res.get('v')}  algo={res.get('algo')}  hi={res['hi']}  "
+          f"relaxed={res['relaxed']}")
+    # v4 起產線無排除區；僅在有值時才印（回測傳 excluded 進來時仍看得到）
+    if res.get("excluded"):
+        print(f"  EXCL: {res['excluded']}  depths={res.get('exclDepths', [])}"
+              f"  ({res.get('exclAlgo', '—')})")
     for k, g in res["strategies"].items():
         print(f"  {k}: {g}")
 
