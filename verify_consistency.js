@@ -20,27 +20,36 @@ const GAMES={ '539':{pool:39,zones:[0,1,2,3]}, 'f5':{pool:39,zones:[0,1,2,3]}, '
 function structCheck(game,pending,lastDraw){
   const errs=[];
   if(!pending) return ['無 BASE_PENDING'];
-  if(pending.v!==2) return null;                    // 舊格式：跳過結構驗規（相容期）
+  if(pending.v!==2&&pending.v!==3) return null;     // 更舊格式：跳過結構驗規（相容期）
+  // sfg-v3（2026-08-16）：解除「避上期」、R1 由逐組改為全域 G3 高號合計。
+  // 舊 v2 的 BASE_PENDING 仍須照舊規驗，故分版而非直接改寫。
+  const v3=pending.v>=3;
   const zs=GAMES[game].zones, zone=n=>Math.floor(n/10);
   const gs=Object.entries(pending.strategies||{});
   const flat=gs.flatMap(([,g])=>g);
   if(gs.length!==4) errs.push(`組數 ${gs.length}≠4`);
   if(flat.length!==12||new Set(flat).size!==12) errs.push('12碼有重複');
-  if(flat.some(n=>lastDraw.includes(n))) errs.push('含上期號碼');
+  if(!v3&&flat.some(n=>lastDraw.includes(n))) errs.push('含上期號碼');
   for(const [k,g] of gs){
     if(g.length!==3){errs.push(`${k} 非3碼`);continue;}
     const [a,b,c]=g;
     if(!(a<b&&b<c)) errs.push(`${k} 未升冪`);
-    if(c<pending.hi) errs.push(`${k} 違反R1(max<${pending.hi})`);
+    if(!v3&&c<pending.hi) errs.push(`${k} 違反R1(max<${pending.hi})`);
     if(b-a===c-b) errs.push(`${k} 等差`);
     if(a%10===b%10&&b%10===c%10) errs.push(`${k} 同尾`);
     if(!(pending.relaxed||[]).includes('zone')&&zone(a)===zone(b)&&zone(b)===zone(c)) errs.push(`${k} 同號域`);
+  }
+  if(v3){                                           // G3 高號合計，取代逐組 R1
+    const need=pending.minHigh??3;
+    const highs=flat.filter(n=>n>=pending.hi).length;
+    if(highs<need) errs.push(`違反G3(高號合計 ${highs}<${need})`);
   }
   if(!(pending.relaxed||[]).includes('cover')){
     const cov=new Set(flat.map(zone));
     if(zs.some(z=>!cov.has(z))) errs.push('號域未全覆蓋');
   }
-  // fpx-v1 排除區（2026-08-12）：sfg-v2 選號必須與有效排除區不相交
+  // fpx 排除區（v2 2026-08-12／v3 2026-08-16）：選號必須與有效排除區不相交。
+  // v3 起排除區可能為 0 顆（最低兩根柱子上無號碼），空陣列是合法值不是缺漏。
   if(/^fpx-v\d/.test(pending.exclAlgo||'')){
     const ex=pending.excluded||[];
     if(new Set(ex).size!==ex.length) errs.push('排除區有重複');

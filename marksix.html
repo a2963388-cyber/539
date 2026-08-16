@@ -971,18 +971,18 @@ function renderPick(el){
   ${(()=>{
     const P=pendingPick;
     if(!P||!P.strategies) return `<div class="card"><h3>🎯 本期選號</h3><div style="color:var(--muted);font-size:.83rem">尚未發布（資料更新後由系統自動產生）</div></div>`;
-    const isV2=P.v===2;
+    const isV2=P.v>=2;   // 勿寫死版號：v3 沿用同一套顯示
     const groups=Object.entries(P.strategies);
     return `<div class="card" style="border-left:4px solid #16a34a">
       <h3>🎯 本期選號（${groups.length} 組${isV2?' × 3 碼':''}）</h3>
-      ${isV2?`<div style="font-size:.72rem;color:var(--muted);margin-bottom:8px">演算法 ${P.algo}｜種子＝上期期號 <strong>${P.seed}</strong>｜高號門檻 ≥${P.hi}${P.relaxed&&P.relaxed.length?`｜規則放寬：${P.relaxed.join('、')}`:''}</div>`:''}
+      ${isV2?`<div style="font-size:.72rem;color:var(--muted);margin-bottom:8px">演算法 ${P.algo}｜種子＝上期期號 <strong>${P.seed}</strong>｜高號門檻 ≥${P.hi}${P.minHigh?`（合計至少 ${P.minHigh} 碼）`:''}${P.relaxed&&P.relaxed.length?`｜規則放寬：${P.relaxed.join('、')}`:''}</div>`:''}
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:8px">
         ${groups.map(([k,nums])=>`<div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 10px;text-align:center">
           <div style="font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:4px">${k} 組</div>
           <div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${nums.map(n=>ball(n)).join('')}</div>
         </div>`).join('')}
       </div>
-      ${isV2?`<div style="font-size:.7rem;color:var(--muted);line-height:1.7">🔍 <strong>可驗證</strong>：本期號碼以「上期期號當種子」的公開演算法（pick_engine.py，sfg-v1）產生，任何人可重算得到完全相同結果——事前發布、事後不可改。選法避開生日號集中、等差、同尾等大眾簽法，在分彩池玩法中可降低中獎時的分彩金稀釋。<br>⚖️ <strong>誠實揭露</strong>：選號不改變中獎機率。每組 3 碼全中機率約 1/921（對主 6 碼，特別號不計），任何選法皆同。開獎後由系統自動兌獎，結果見「🏆 中獎追蹤」。</div>`:''}
+      ${isV2?`<div style="font-size:.7rem;color:var(--muted);line-height:1.7">🔍 <strong>可驗證</strong>：本期號碼以「上期期號當種子」的公開演算法（pick_engine.py，${P.algo}）產生，任何人可重算得到完全相同結果——事前發布、事後不可改。選法避開等差、同尾等大眾簽法，並要求 12 碼中合計至少 ${P.minHigh??3} 碼落在高號區（≥${P.hi}），在分彩池玩法中可降低中獎時的分彩金稀釋。<br>⚖️ <strong>誠實揭露</strong>：選號不改變中獎機率。每組 3 碼全中機率約 1/921（對主 6 碼，特別號不計），任何選法皆同。開獎後由系統自動兌獎，結果見「🏆 中獎追蹤」。</div>`:''}
     </div>`;
   })()}
   <div class="card">
@@ -1004,11 +1004,11 @@ function renderPick(el){
     const ex=P.excluded||[], ds=P.exclDepths||[];
     const TH=(6/49*100).toFixed(1);
     return `<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>🚫 不出牌排除區（fpx-v2｜本期 ${ex.length} 顆）</h3>
-      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：取平坦度圖上「距基準線最低」的柱子，由低往高收號碼直到湊滿 5 顆（低於理論值 ${TH}% 的柱子才有資格；空柱照樣消耗名次）。本期用到的柱子 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${ex.map(n=>ballX(n,'ball-sm')).join('')}</div>
+      <h3>🚫 不出牌排除區（${P.exclAlgo}｜本期 ${ex.length} 顆）</h3>
+      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：取平坦度圖上「距基準線最低」的 <strong>2 根</strong>柱子，其上有幾顆號碼就排幾顆（低於理論值 ${TH}% 的柱子才有資格；空柱照樣消耗名次，故本區可能為 0 顆）。本期用到的柱子 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${ex.length?ex.map(n=>ballX(n,'ball-sm')).join(''):`<span style="font-size:.75rem;color:var(--muted)">本期最低兩根柱子上沒有停留的號碼——排除區為空，四組選號不受此規則限制。</span>`}</div>
       ${P.relaxed&&P.relaxed.includes('pool')?`<div style="font-size:.7rem;color:#d97706;margin-bottom:4px">⚠️ 本期排除後候選池低於下限，已依註冊規則回補部分號碼（relaxed:pool）；上列為回補後的有效排除區。</div>`:''}
-      <div style="font-size:.7rem;color:var(--muted)">🎯 本期四組選號（sfg-v2）已避開本區。誠實揭露：平坦度檢驗卡自己證明了這些偏離是抽樣噪音——本區是可重現的縮池慣例，不是預測訊號；追蹤頁的 out-of-sample 累積就是它的裁決台，預期長期與隨機基準無異。</div>
+      <div style="font-size:.7rem;color:var(--muted)">🎯 本期四組選號（${P.algo}）已避開本區。誠實揭露：平坦度檢驗卡自己證明了這些偏離是抽樣噪音——本區是可重現的縮池慣例，不是預測訊號；追蹤頁的 out-of-sample 累積就是它的裁決台，預期長期與隨機基準無異。</div>
     </div>`;
   })()}
   ${(()=>{
@@ -1507,12 +1507,14 @@ function renderTrack(el) {
             <span style="font-size:.72rem">95%CI ${stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—'}</span>
           </div></div>`;
       };
-      const fpx=rows.filter(l=>(l.exclAlgo||'').startsWith('fpx'));
+      const fpx3=rows.filter(l=>(l.exclAlgo||'')==='fpx-v3');
+      const fpx12=rows.filter(l=>/^fpx-v[12]$/.test(l.exclAlgo||''));
       const legacy=rows.filter(l=>!(l.exclAlgo||'').startsWith('fpx'));
       return `<div style="margin-top:10px;padding:10px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;font-size:.75rem">
         🎯 <strong>不出牌 out-of-sample</strong>
-        <span style="font-size:.7rem;color:var(--muted)">｜開獎落入排除區的碼數；fpx-v1 顆數逐期浮動，期望逐筆計算（顆數×開出數/池）</span>
-        ${seg(fpx,'fpx-v2（現行，2026-08-12 事前註冊：最低柱湊滿5顆）')}
+        <span style="font-size:.7rem;color:var(--muted)">｜開獎落入排除區的碼數；各版顆數皆逐期浮動，期望逐筆計算（顆數×開出數/池）</span>
+        ${seg(fpx3,'fpx-v3（現行，2026-08-16 事前註冊：最低 2 根柱子，顆數不定）')}
+        ${seg(fpx12,'fpx-v1／v2（已退役：最低柱湊滿 5 顆，2026-08-12～08-16）')}
         ${seg(legacy,'舊制：區間輪動＋馬可夫固定 15 碼（已退役凍結）')}
       </div>`;
     })()}
@@ -1587,7 +1589,7 @@ function renderTrack(el) {
         </div>
       </div>
       <div style="display:flex;gap:3px;margin-top:2px">${rows.map(r=>`<div style="flex:1;text-align:center;font-size:.58rem;color:var(--muted)">${r.g}</div>`).join('')}</div>
-      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌用到的柱子 fpx-v2）</div>
+      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌用到的柱子 fpx-v3）</div>
       <div style="font-size:.74rem;padding:7px 10px;background:${outliers<=1?'#f0fdf4':'#fef9c3'};border-radius:6px">
         ${outliers<=1
           ?`✅ <strong>各沉寂深度的回歸機率均貼近理論值</strong>（${rows.length} 個深度僅 ${outliers} 個超出 ±2σ，屬正常波動）——「沉寂越久越該回歸」在本資料中<strong>不成立</strong>，這是每期獨立開獎的直接證據。號碼不會「記得」自己沉寂多久。`

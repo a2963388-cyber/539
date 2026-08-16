@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pick_engine — 期號種子可重現選號引擎（sfg-v2）＋ fpx-v2 不出牌排除區
+pick_engine — 期號種子可重現選號引擎（sfg-v3）＋ fpx-v3 不出牌排除區
 =================================================
 
-事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12（鈞洋拍板）。本檔即規格本身，
+事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12、
+         **sfg-v3/fpx-v3 2026-08-16**（皆鈞洋拍板）。本檔即規格本身，
 任何人可依下述規則獨立重實作並得到逐位元相同的結果。
 
 目標
@@ -21,7 +22,35 @@ pick_engine — 期號種子可重現選號引擎（sfg-v2）＋ fpx-v2 不出�
    在「固定賠率」玩法中僅具紀律價值；
 3. 紀律 —— 每期固定 4 組，控制成本。
 
-規格（sfg-v2；與 v1 的差異＝候選池再排除 fpx-v2 不出牌區＋高號預算）
+═══ v3 變更紀錄（2026-08-16，鈞洋拍板；只往前生效，不回頭重算歷史）═══
+三項放寬，動機皆為結構性（非因近期未中）：
+
+  [1] 移除「避上期」約束
+      舊：候選池排除上期開出的號碼。
+      新：不排除，上期號碼可再被選中。
+      理由：上期號碼下期再出的機率與其他號碼**完全相同**（d/POOL_MAX），
+            「避上期」從無機率依據，只是平白縮小候選池。
+      ※ 全歷史實測連莊率（2026-08-16）：539 13.60% / F5 14.21% / 六合 12.62%，
+        對應理論值 12.82% / 12.82% / 12.24%，三者 p=0.46 / 0.14 / 0.62，
+        **均未達統計顯著**。故本次修改**不主張**連莊有預測價值，
+        僅移除一條沒有根據的限制。
+
+  [2] R1 高號保底：組內規則 → 全域規則
+      舊：每組最大碼 c ≥ hi（四組各佔一顆高號，539/F5 僅 8 顆 ≥32，綁死）。
+      新：四組合計至少 MIN_HIGH_TOTAL(3) 顆 ≥ hi；單組可完全沒有高號。
+      理由：反熱門的意義在「12 碼整體不全擠在生日區 1-31」，
+            逐組強制並無額外效果，卻大幅壓縮候選空間。
+
+  [3] fpx-v3 不出牌排除區：湊滿顆數 → 固定柱數
+      舊（v2）：距基準最低的柱子由低往高收號碼，直到累計 ≥ 5 顆。
+      新（v3）：只取距基準最低的 EXCL_BARS(2) 根柱子，**上面有幾顆算幾顆**。
+      理由：v2 為湊滿 5 顆常需消耗 4-5 根柱子，排除範圍超出「最偏離」的本意。
+      ※ 全歷史回放（2026-08-16）：排除區平均大小 539 6.27→1.44、
+        F5 5.61→1.76、六合 5.39→0.88 顆；且有 28.9% / 35.5% / 41.0%
+        的期數排除區為 **0 顆**（最低兩根柱子上無號碼）。
+        即本規則多數時候近乎不作用 —— 這是已知且接受的後果。
+
+規格（sfg-v3）
 --------------
 彩種常數：
     game   POOL_MAX  SALT  號域（zone = n // 10）
@@ -35,40 +64,51 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     x(k+1) = x(k) * 48271 mod 2147483647
     取號    n = 1 + x mod POOL_MAX
     全程整數運算；禁用時間、OS 熵源 —— 純函數，同輸入必同輸出。
+    ※ 種子仍取 last_period（上期期號），此點 v3 未變。
 
 抽取程序：
-    候選池 P = {1..POOL_MAX} ∖ set(last_draw) ∖ excluded（fpx-v2 排除區）
+    候選池 P = {1..POOL_MAX} ∖ excluded（fpx-v3 排除區）
+              ※ v3 起不再扣除 last_draw
     池 < MIN_POOL 依 (h高→低,深度淺→深,小號) 回補並記 relaxed:"pool"
-    高號區門檻 hi 初始 32；若 |{hi..POOL_MAX} ∩ P| < 4 則 hi 每次減 2，
-    直到湊滿 4 個高號候選，實際 hi 記入輸出（539/F5 上期全高號之退化保護）。
+    高號區門檻 hi 初始 32；若 |{hi..POOL_MAX} ∩ P| < MIN_HIGH_TOTAL(3)
+    則 hi 每次減 2，直到湊滿 3 個高號候選，實際 hi 記入輸出。
 
     依序產生 A、B、C、D；每組自同一條 LCG 數列連續取號，
     跳過「不在 P」「已被前面組用掉」「本組已有」的號碼；
     湊滿 3 碼（升冪 a<b<c）後檢查組規則：
-        R1 高號保底：c ≥ hi
         R2 無等差：  ¬(b−a == c−b)（任意公差，含連號）
         R3 無同尾：  ¬(a%10 == b%10 == c%10)
         R4 跨號域：  三碼不可全落同一 zone
+        （R1 已於 v3 改為全域規則 G3，不再逐組檢查）
     違規 → 本組 3 碼放棄（不佔用），繼續同一條數列重抽；單組上限 300 次。
 
+    高號下限引導（保證 G3 成立的構造）：
+        抽第 gi 組（0-based）時，令 have = 已用掉的高號數、
+        still = max(0, MIN_HIGH_TOTAL − have)、after = 3 − gi（本組之後的組數），
+        則本組最少高號數 min_high = max(0, still − 3 × after)。
+        故 D 組必被要求補足全部缺口，G3 由構造保證。
+
     四組完成後全域檢查：
-        G1 12 碼互不重複、與上期無交集（由構造保證）
+        G1 12 碼互不重複（由構造保證）
         G2 號域全覆蓋：每個 zone 至少 1 碼（539/F5 四區、m6 五區）
-        G2 違規 → 僅重抽 D 組（上限 300 次），且要求 D 含所有缺失 zone 的號碼。
+        G3 高號合計：|{n ∈ 12碼 : n ≥ hi}| ≥ MIN_HIGH_TOTAL（3）
+        G2 違規 → 僅重抽 D 組（上限 300 次），且要求 D 含所有缺失 zone 的
+                  號碼，並同時滿足其 min_high。
 
     Fallback 階梯（整輪重跑、數列自 s0 重啟；每放寬一級記入 relaxed）：
         第 1 級 relaxed=["cover"]        放寬 G2 號域覆蓋
         第 2 級 relaxed=["cover","zone"] 再放寬 R4 組內跨域
-        永不放寬：12 碼不重複、避上期、R1（有 hi 降階）、R2、R3
+        永不放寬：12 碼不重複、G3 高號合計（有 hi 降階）、R2、R3
         最終兜底 relaxed+=["lex"]：對 P 升冪、以字典序回溯枚舉取最小合法解。
 
 兌獎口徑（由 build_log_entries 沿用執行）：
     539 / F5 對開出 5 碼；六合對「主 6 碼」，特別號（e 欄）不計。
 
-輸出（BASE_PENDING v2 之核心，excluded/ts 由呼叫端補）：
-    {"v":2, "algo":"sfg-v2", "seed":<last_period>, "forPeriod":<last_period+1>,
-     "hi":<實際門檻>, "relaxed":[...],
-     "strategies":{"A":[a,b,c], "B":[...], "C":[...], "D":[...]}}
+輸出（BASE_PENDING v3 之核心，ts 由呼叫端補）：
+    {"v":3, "algo":"sfg-v3", "seed":<last_period>, "forPeriod":<last_period+1>,
+     "hi":<實際門檻>, "minHigh":3, "relaxed":[...],
+     "strategies":{"A":[a,b,c], "B":[...], "C":[...], "D":[...]},
+     "excluded":[...], "exclAlgo":"fpx-v3", "exclDepths":[...]}
     ※ forPeriod 僅供顯示；跨年改號（如六合 26/xxx→27/001）時以實際開獎為準。
 
 驗算（給親友）：
@@ -79,7 +119,7 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
 
 from itertools import combinations
 
-ALGO = "sfg-v2"   # v1（2026-08-09）：避上期；v2（2026-08-12）：再避 fpx-v1 不出牌排除區
+ALGO = "sfg-v3"   # v1（08-09）避上期；v2（08-12）加 fpx 排除區；v3（08-16）解除避上期＋R1 改全域
 MOD = 2147483647
 MULT = 48271
 
@@ -91,7 +131,10 @@ GAMES = {
 
 MIN_POOL = 16          # 候選池下限：12 碼＋過濾規則的活動空間
 ATRISK_MIN = 20        # 平坦度深度樣本門檻（與頁面平坦度卡同值）
-MIN_EXCL = 5           # fpx-v2：由最低柱往上收號碼的目標顆數（鈞洋 2026-08-12 拍板「湊滿 5 顆」）
+EXCL_BARS = 2          # fpx-v3：只取距基準最低的柱子根數，上面有幾顆算幾顆
+                       #（鈞洋 2026-08-16 拍板，取代 v2 的「湊滿 5 顆」）
+MIN_HIGH_TOTAL = 3     # sfg-v3 G3：四組合計最少高號（≥hi）顆數
+                       #（鈞洋 2026-08-16 拍板，取代 v2 的「每組最大碼 ≥hi」）
 
 GROUP_RETRY_LIMIT = 300
 
@@ -117,9 +160,11 @@ def zone_of(n):
 
 
 def group_ok(trio, hi, relax_zone):
+    """組內規則。sfg-v3 起 R1 已移出（改為全域 G3），此處只驗 R2/R3/R4。
+
+    hi 參數保留於簽章以維持呼叫端相容，本函式不再使用它。
+    """
     a, b, c = trio
-    if c < hi:                                   # R1 高號保底
-        return False
     if b - a == c - b:                           # R2 無等差
         return False
     if a % 10 == b % 10 == c % 10:               # R3 無同尾
@@ -130,12 +175,13 @@ def group_ok(trio, hi, relax_zone):
 
 
 def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
-                max_high=3):
+                min_high=0):
     """自數列連續取號湊一組；違規放棄重抽（同一條數列），上限 GROUP_RETRY_LIMIT。
 
-    max_high＝本組最多可佔用的高號（≥hi）數。高號預算（sfg-v2 補強，2026-08-12）：
-    排除區會壓縮高號供給，若前面的組貪婪吃掉多顆高號，後面的組會 R1 無解
-    而整階梯崩落到字典序兜底（實測：高號恰 4 顆時組1 佔 2 顆 → 組3 無高號可用）。
+    min_high＝本組**最少**須佔用的高號（≥hi）數（sfg-v3，2026-08-16）。
+    v2 的 max_high 預算是為了「保證每組都湊得到高號」；v3 把 R1 改成全域
+    合計 ≥MIN_HIGH_TOTAL 後，需求反轉為下限引導 —— 由呼叫端逐組遞推，
+    使最後一組必被要求補足缺口，G3 遂由構造保證而非事後檢查。
     """
     for _ in range(GROUP_RETRY_LIMIT):
         trio = []
@@ -150,7 +196,7 @@ def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
         if len(trio) < 3:
             return None
         trio.sort()
-        if sum(1 for n in trio if n >= hi) > max_high:
+        if sum(1 for n in trio if n >= hi) < min_high:
             continue
         if not group_ok(trio, hi, relax_zone):
             continue
@@ -167,11 +213,16 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
     used = set()
     groups = []
     for gi in range(4):
-        # 高號預算：本組佔用數 ≤ 剩餘高號 −（之後還有幾組，各需至少 1 顆）
-        highs_left = sum(1 for n in pool if n >= hi and n not in used)
-        max_high = max(1, highs_left - (3 - gi))
+        # 高號下限引導（sfg-v3）：still = 還缺幾顆；after = 本組之後還有幾組。
+        # 每組**承載上限記 2 而非 3**：539/F5 的高號 32-39 全落在 zone 3，
+        # 若讓最後一組扛滿 3 顆，該組必然三碼同域而撞 R4 —— 實測 539 有 7 期
+        # 因此掉進 relaxed，其中期 115066 更一路崩到 lex 兜底。記 2 可使
+        # 壓力提前一組分擔，任一組最多只需 2 顆高號，不觸發 R4。
+        have = sum(1 for n in used if n >= hi)
+        still = max(0, MIN_HIGH_TOTAL - have)
+        min_high = max(0, still - 2 * (3 - gi))
         trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone,
-                           max_high=max_high)
+                           min_high=min_high)
         if trio is None:
             return None
         groups.append(trio)
@@ -189,22 +240,36 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
             if len(missing) > 3:
                 return None  # 一組 3 碼不可能補齊，交給 fallback 階梯
             used.difference_update(groups[3])
+            # 重抽的 D 仍須扛起 G3 缺口，否則舊 D 的高號會隨重抽一起消失
+            have_abc = sum(1 for n in used if n >= hi)
             trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone,
-                               require_zones=missing)
+                               require_zones=missing,
+                               min_high=max(0, MIN_HIGH_TOTAL - have_abc))
             if trio is None:
                 return None
             groups[3] = trio
             used.update(trio)
+
+    # G3 由 min_high 構造保證；此處為防禦性複驗（構造若被改壞會在 selftest 現形）
+    if sum(1 for g in groups for n in g if n >= hi) < MIN_HIGH_TOTAL:
+        return None
     return groups
 
 
 def _lex_fallback(pool, hi, pool_max):
-    """字典序回溯：取最小合法 4×3（永不放寬的規則全數保留）。"""
+    """字典序回溯：取最小合法 4×3（永不放寬的規則全數保留，含 G3 高號合計）。"""
     ordered = sorted(pool)
 
     def pick(groups, remaining):
         if len(groups) == 4:
-            return groups
+            highs = sum(1 for g in groups for n in g if n >= hi)
+            return groups if highs >= MIN_HIGH_TOTAL else None
+        # 剪枝：剩下的組就算全塞高號也補不到 MIN_HIGH_TOTAL，直接回頭。
+        # 字典序從小號開始展開，沒有這道剪枝會把整棵低號子樹走完才發現無解。
+        have = sum(1 for g in groups for n in g if n >= hi)
+        avail = sum(1 for n in remaining if n >= hi)
+        if have + min(avail, 3 * (4 - len(groups))) < MIN_HIGH_TOTAL:
+            return None
         for trio in combinations(remaining, 3):
             if group_ok(list(trio), hi, relax_zone=True):
                 res = pick(groups + [list(trio)],
@@ -216,22 +281,24 @@ def _lex_fallback(pool, hi, pool_max):
     return pick([], ordered)
 
 
-# ──────────────────── fpx-v2 不出牌排除區（2026-08-12 事前註冊）────────────────────
+# ──────────────────── fpx-v3 不出牌排除區（2026-08-16 事前註冊）────────────────────
 #
-# 規則（鈞洋 2026-08-12 拍板；同日的 fpx-v1「低於理論值全排」是對其原意的誤解，
-# v1 存續期間零筆結算即被本版取代，無需分段）：
+# 規則（鈞洋 2026-08-16 拍板，取代 v2）：
 #   對平坦度檢驗圖上「低於理論值」的深度，依 h(g) 由低到高（同 h 取深度小者）
-#   逐根收集其上的號碼，**直到累計 ≥ MIN_EXCL(5) 顆為止**——即「距離基準最低的
-#   那幾根柱子」上的號碼進不出牌區。空柱（該深度目前無號碼）照樣消耗名次。
+#   **只取最前面 EXCL_BARS(2) 根柱子**，其上有幾顆號碼就排幾顆——不再為湊顆數
+#   繼續往上收。空柱（該深度目前無號碼）照樣消耗一個名次，故排除區可能為 0 顆。
 #   h(g) = dist[g] / atRisk(g)，與平坦度卡完全同一條算式；
 #   atRisk < ATRISK_MIN 的深度樣本太薄，視為中性、不給排除資格。
-#   低於理論值的柱子全收仍不足 MIN_EXCL 時，有多少排多少（不硬湊）。
+#
+#   與 v2 的差異：v2 為湊滿 5 顆常需吃掉 4-5 根柱子，排除範圍超出「最偏離」本意。
+#   v3 改為固定 2 根，實測排除區均值 539 6.27→1.44、F5 5.61→1.76、六合 5.39→0.88，
+#   且 28.9%/35.5%/41.0% 的期數為 0 顆。**本規則多數時候近乎不作用，已知並接受。**
 #
 # 誠實揭露（不可刪）：本站平坦度卡的結論正是「這些偏離是抽樣噪音」——本規則是
 # 可重現的縮池慣例，不是預測訊號；out-of-sample 追蹤（excludedHits）就是它的裁決台，
 # 預期長期與隨機基準無異。
 #
-# sfg-v2（同日註冊）：選號候選池在「避上期」外，再排除本區號碼。
+# sfg-v3（同日註冊）：選號候選池＝全池 ∖ 本區（v3 起**不再扣除上期號碼**）。
 # 池低於 MIN_POOL 時依 (h 高→低、深度淺→深、號碼小→大) 回補並記 relaxed:"pool"。
 
 def build_return_dist(records):
@@ -260,10 +327,10 @@ def current_gaps(records, pool_max):
 
 
 def flatness_exclude(game, records):
-    """fpx-v2：回傳 (excluded 升冪, excl_depths 升冪, readmit_order)。純函數。
+    """fpx-v3：回傳 (excluded 升冪, excl_depths 升冪, readmit_order)。純函數。
 
-    由最低柱往上收號碼直到 ≥ MIN_EXCL 顆；同 h 取深度小者（決定性）。
-    excl_depths 為實際消耗的柱子（含空柱），供頁面平坦度圖 🚫 標記。
+    只取距基準最低的 EXCL_BARS(2) 根柱子，上面有幾顆算幾顆；同 h 取深度小者
+    （決定性）。excl_depths 為實際消耗的柱子（含空柱），供頁面平坦度圖 🚫 標記。
     """
     cfg = GAMES[game]
     theory = cfg["draw"] / cfg["pool_max"]
@@ -281,11 +348,9 @@ def flatness_exclude(game, records):
             below.append((h, g, sorted(n for n, gg in gaps.items() if gg == g)))
     below.sort(key=lambda t: (t[0], t[1]))
     excluded, excl_depths = [], []
-    for h, g, nums in below:
+    for h, g, nums in below[:EXCL_BARS]:      # fpx-v3：固定根數，不看顆數
         excl_depths.append(g)
         excluded.extend(nums)
-        if len(excluded) >= MIN_EXCL:
-            break
     excluded.sort()
     excl_depths.sort()
     # 回補順序：h 最接近理論值者先回（h 高→低）、深度淺→深、小號優先
@@ -296,16 +361,18 @@ def flatness_exclude(game, records):
 def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=()):
     """主入口。純函數：同輸入必得同結果。
 
-    sfg-v2（2026-08-12）：候選池＝全池 ∖ 上期 ∖ excluded（fpx-v1 不出牌排除區）。
+    sfg-v3（2026-08-16）：候選池＝全池 ∖ excluded（fpx-v3 不出牌排除區）。
+    **v3 起不再扣除 last_draw** —— 上期號碼下期再出的機率與其他號碼相同，
+    「避上期」無機率依據。last_draw 參數保留：仍供呼叫端與驗證比對之用。
     池 < MIN_POOL 時依 readmit_order 回補並記 relaxed:"pool"。
     回傳的 excluded 為**有效**排除區（原排除 ∖ 已回補），選號保證與其不相交。
     """
     cfg = GAMES[game]
     pool_max = cfg["pool_max"]
-    pool = set(range(1, pool_max + 1)) - set(last_draw) - set(excluded)
+    pool = set(range(1, pool_max + 1)) - set(excluded)
 
     pool_relaxed = False
-    eff_excluded = [n for n in excluded if n not in last_draw]
+    eff_excluded = list(excluded)
     for n in readmit_order:
         if len(pool) >= MIN_POOL:
             break
@@ -314,8 +381,9 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
             eff_excluded.remove(n)
             pool_relaxed = True
 
+    # hi 降階：只需湊得出 MIN_HIGH_TOTAL 顆高號候選（v2 是每組各一共 4 顆）
     hi = 32
-    while len([n for n in pool if n >= hi]) < 4 and hi > 2:
+    while len([n for n in pool if n >= hi]) < MIN_HIGH_TOTAL and hi > 2:
         hi -= 2
 
     s0 = derive_seed(last_period, cfg["salt"])
@@ -338,11 +406,12 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
     if pool_relaxed:
         relaxed = relaxed + ["pool"]
     return {
-        "v": 2,
+        "v": 3,
         "algo": ALGO,
         "seed": last_period,
         "forPeriod": last_period + 1,
         "hi": hi,
+        "minHigh": MIN_HIGH_TOTAL,
         "relaxed": relaxed,
         "strategies": {k: g for k, g in zip("ABCD", groups)},
         "excluded": sorted(eff_excluded),
@@ -350,7 +419,7 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
 
 
 def gen_pending_core(game, records):
-    """一站式：fpx-v1 排除 ＋ sfg-v2 四組。fetch 與 CLI 的共同入口。
+    """一站式：fpx-v3 排除 ＋ sfg-v3 四組。fetch 與 CLI 的共同入口。
 
     records 新→舊（同 BASE_REC）。回傳 pending 核心（呼叫端補 ts）。
     """
@@ -359,7 +428,7 @@ def gen_pending_core(game, records):
     excl, depths, readmit = flatness_exclude(game, records)
     core = gen_four_groups(game, records[0]["p"], records[0]["n"],
                            excluded=excl, readmit_order=readmit)
-    core["exclAlgo"] = "fpx-v2"
+    core["exclAlgo"] = "fpx-v3"
     core["exclDepths"] = depths
     return core
 
@@ -388,24 +457,25 @@ def _verify_output(game, last_draw, res):
     errs = []
     if len(set(flat)) != 12:
         errs.append("12碼有重複")
-    if set(flat) & set(last_draw):
-        errs.append("含上期號碼")
+    # sfg-v3 起不再驗「含上期號碼」——避上期已解除，上期號碼可再被選中
     for k, g in res["strategies"].items():
         a, b, c = g
         if not (a < b < c):
             errs.append(f"{k} 未升冪")
-        if c < res["hi"]:
-            errs.append(f"{k} 違反 R1")
         if b - a == c - b:
             errs.append(f"{k} 違反 R2")
         if a % 10 == b % 10 == c % 10:
             errs.append(f"{k} 違反 R3")
         if "zone" not in res["relaxed"] and zone_of(a) == zone_of(b) == zone_of(c):
             errs.append(f"{k} 違反 R4")
+    # G3 高號合計（sfg-v3 取代逐組 R1）
+    highs = sum(1 for n in flat if n >= res["hi"])
+    if highs < res.get("minHigh", MIN_HIGH_TOTAL):
+        errs.append(f"違反 G3 高號合計（{highs} < {res.get('minHigh', MIN_HIGH_TOTAL)}）")
     if "cover" not in res["relaxed"]:
         if set(cfg["zones"]) - {zone_of(n) for n in flat}:
             errs.append("違反 G2 覆蓋")
-    # sfg-v2：選號必須與有效排除區不相交（回補過的號碼已不在 excluded 內）
+    # sfg-v3：選號必須與有效排除區不相交（回補過的號碼已不在 excluded 內）
     hit_excl = set(flat) & set(res.get("excluded", []))
     if hit_excl:
         errs.append(f"選號含排除區號碼 {sorted(hit_excl)}")

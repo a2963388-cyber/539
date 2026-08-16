@@ -312,7 +312,8 @@ def write_pick_state(html, picklog, pending):
 
 
 # ── 更新 marksix.html ─────────────────────────────────────────
-def update_html(new_draws: list, dry_run: bool = False):
+def update_html(new_draws: list, dry_run: bool = False,
+                force_repick: bool = False):
     html = DATA_FILE.read_text(encoding="utf-8")
     current_latest = read_current_latest(html)
 
@@ -376,10 +377,24 @@ def update_html(new_draws: list, dry_run: bool = False):
 
     # ── 產生新預測 ─────────────────────────────────────────────
     core = gen_pending(all_records)
+    # ── 演算法改版閘門（2026-08-16）────────────────────────────
+    # BASE_PENDING 一經發布即是「事前註冊」的預測。演算法改版時，
+    # 若該期尚未開獎（forPeriod 未變），不得回頭抽換已發布的號碼，
+    # 否則「事後不可改」就只是一句口號。新版待本期結算後自然生效。
+    # 註：現行流程下 update_html 只在抓到新開獎時才執行，forPeriod 必然
+    #     前進一期，故本閘門平時不會觸發。它擋的是補抓歷史、重複抓到
+    #     同一期，以及日後若有人把 pending 改成「每次執行都重算」的情形。
+    if (base_pending and not force_repick
+            and base_pending.get('forPeriod') == core.get('forPeriod')
+            and base_pending.get('algo') != core.get('algo')):
+        print(f"→ 演算法已改版（{base_pending.get('algo')} → {core.get('algo')}），"
+              f"但第 {core.get('forPeriod')} 期預測早已發布，保留原號碼不抽換；"
+              f"新版自下期開獎後生效。（要立即換版：--force-repick）")
+        core = dict(base_pending)
     new_strategies = core.get('strategies', {})
     new_pending = {
         **core,           # sfg-v2 已含 excluded / exclDepths / exclAlgo
-        'ts': int(time.time() * 1000),
+        'ts': core.get('ts') or int(time.time() * 1000),
     }
     html = write_pick_state(html, new_log_entries + base_picklog, new_pending)
 
@@ -415,6 +430,9 @@ def update_html(new_draws: list, dry_run: bool = False):
 def main():
     parser = argparse.ArgumentParser(description="自動抓取香港六合彩最新開獎")
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
+    parser.add_argument("--force-repick", action="store_true",
+                        help="演算法改版時，強制重算「尚未開獎」那期的預測"
+                             "（預設保留已發布號碼，見改版閘門）")
     args = parser.parse_args()
 
     html = DATA_FILE.read_text(encoding="utf-8")
@@ -435,7 +453,7 @@ def main():
                 print(f"⚠️ 資料已 {gap_days} 天未更新，已發送 macOS 通知")
         return
 
-    update_html(draws, dry_run=args.dry)
+    update_html(draws, dry_run=args.dry, force_repick=args.force_repick)
 
 
 if __name__ == "__main__":
