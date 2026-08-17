@@ -441,6 +441,41 @@ function dormancyBefore(i, n) {
   return rec.length-i-1;
 }
 
+
+// ── 同沉寂期數對照（2026-08-18 鈞洋要求）───────────────────────
+// 目的：每期開出的號碼各自沉寂了幾期，以及**同樣沉寂那麼多期、卻沒有開出**的其他號碼。
+// 這是「沉寂深度到底有沒有預測力」最直觀的檢視：同一格裡有的開了、有的沒開。
+// 預計算整張表，避免每格都跑一次 dormancyBefore（那是 O(期數)，會讓頁面卡住）。
+let _dormTbl = null;
+function dormancyTable() {
+  if (_dormTbl) return _dormTbl;
+  const MAXN = 49;
+  const tbl = new Array(rec.length);
+  const gap = {};
+  for (let n = 1; n <= MAXN; n++) gap[n] = null;   // null = 在更舊的紀錄裡從未出現
+  for (let i = rec.length - 1; i >= 0; i--) {      // rec 是新→舊，故由最舊往回推
+    const cur = {};
+    for (let n = 1; n <= MAXN; n++) cur[n] = (gap[n] === null) ? (rec.length - i - 1) : gap[n];
+    tbl[i] = cur;
+    for (let n = 1; n <= MAXN; n++) {
+      if (rec[i].n.includes(n)) gap[n] = 0;
+      else if (gap[n] !== null) gap[n] = gap[n] + 1;
+    }
+  }
+  _dormTbl = tbl;
+  return tbl;
+}
+// 第 i 期抽獎前，沉寂深度剛好等於 d、但該期**沒有**開出的號碼
+function sameDormancyOthers(i, d) {
+  const MAXN = 49;
+  const t = dormancyTable()[i], drawn = rec[i].n, out = [];
+  for (let n = 1; n <= MAXN; n++) {
+    if (drawn.includes(n)) continue;
+    if (t[n] === d) out.push(n);
+  }
+  return out;
+}
+
 function toggleRptDetail(id) {
   const el=document.getElementById(id);
   if(el) el.style.display = el.style.display==='none'?'table-row':'none';
@@ -540,7 +575,7 @@ function renderReportHistory(el) {
             </tr>
             <tr id="${did}" style="display:none">
               <td colspan="8" style="padding:8px 14px 10px;background:#f8fafc">
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
                   ${p.details.map(x=>{
                     const clr=x.ratio>=2.0?'#9333ea':x.ratio>=1.0?'#d97706':'#64748b';
                     const note=x.d===0?'連莊':x.ratio>=2.0?'超期':x.ratio>=1.0?'逾期':'正常';
@@ -550,6 +585,42 @@ function renderReportHistory(el) {
                     </div>`;
                   }).join('')}
                 </div>
+                ${(()=>{
+                  // ── 同沉寂期數對照（2026-08-18 新增）──
+                  // 按沉寂深度分組：同一深度裡，哪些開出了、哪些沒開出。
+                  const byD = {};
+                  p.details.forEach(x=>{
+                    if(!byD[x.d]) byD[x.d] = {drawn:[], others: sameDormancyOthers(p.i, x.d)};
+                    byD[x.d].drawn.push(x.n);
+                  });
+                  const ds = Object.keys(byD).map(Number).sort((a,b)=>a-b);
+                  return `<div style="border-top:1px dashed var(--border);padding-top:8px">
+                    <div style="font-size:.7rem;color:var(--muted);margin-bottom:5px;font-weight:600">
+                      🔍 同沉寂期數對照 — 一樣沉寂那麼久，誰開了、誰沒開
+                    </div>
+                    ${ds.map(d=>{
+                      const g = byD[d];
+                      const tot = g.drawn.length + g.others.length;
+                      const rate = (g.drawn.length/tot*100).toFixed(0);
+                      return `<div style="background:#fff;padding:5px 8px;border-radius:7px;border:1px solid var(--border);margin-bottom:4px">
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:.7rem">
+                          <b style="color:#0f172a;white-space:nowrap">沉寂 ${d} 期</b>
+                          <span style="color:#16a34a">開出</span>
+                          ${g.drawn.map(n=>`<span class="ball ball-sm ${ZC[Z(n)]}">${f2(n)}</span>`).join('')}
+                          ${g.others.length?`<span style="color:var(--muted)">未開出</span>
+                            ${g.others.map(n=>`<span class="ball ball-sm ${ZC[Z(n)]}" style="opacity:.35">${f2(n)}</span>`).join('')}`
+                            :`<span style="color:var(--muted)">（此深度沒有別的號碼）</span>`}
+                          <span style="margin-left:auto;color:#64748b;white-space:nowrap">
+                            ${tot} 碼中開 ${g.drawn.length} 碼 = <b>${rate}%</b></span>
+                        </div>
+                      </div>`;
+                    }).join('')}
+                    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;line-height:1.6">
+                      ⚖️ 每個深度的開出率長期都會回到 <b>${(6/49*100).toFixed(2)}%</b>（＝開出碼數／號池），
+                      與沉寂多久無關。單期的百分比是小樣本波動，不代表該深度比較容易開。
+                    </div>
+                  </div>`;
+                })()}
               </td>
             </tr>`;
           }).join('')}
