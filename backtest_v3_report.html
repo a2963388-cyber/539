@@ -55,7 +55,7 @@ padding-top:12px}
 <tr><td>Fantasy 5</td><td>6301</td><td>501~6801 期</td><td>1.5385</td></tr>
 <tr><td>六合彩</td><td>2086</td><td>501~2586 期</td><td>1.4694</td></tr>
 </table></div>
-<div class="note">🔴 <b>六合彩有兩個不同口徑，不可混用</b>（2026-08-16 鈞洋澄清）：<br>・<b>兌獎</b>：特別號<b>不計</b>，只對主 6 碼（與產線一致，維持不動）→ 用於 T1／T2／T5，理論單碼 6/49 = 12.24%<br>・<b>「有沒有出現」</b>：特別號<b>要計</b>，主 6 ＋ 特碼共 7 碼→ 用於不出牌／排除區命中判定（T3），理論 7/49 = 14.29%<br>※ 排除區／平坦度的 <span class="mono">dist／gaps</span> 目前仍只吃主 6 碼（產線現行演算法），是否改為含特碼待拍板 —— 見下方「N 不出」實測。</div>
+<div class="note">🔴 <b>六合彩有兩個不同口徑，不可混用</b>（2026-08-16 鈞洋澄清）：<br>・<b>兌獎</b>：特別號<b>不計</b>，只對主 6 碼（與產線一致，維持不動）→ 用於 T1／T2／T5，理論單碼 6/49 = 12.24%<br>・<b>「有沒有出現」</b>：特別號<b>要計</b>，主 6 ＋ 特碼共 7 碼→ 用於不出牌／排除區命中判定（T3），理論 7/49 = 14.29%<br>※ 排除區／平坦度的 <span class="mono">dist／gaps</span> 只吃主 6 碼；sfg-v4 廢除排除區後，產線已無處使用「出現」口徑，此處僅為解讀歷史紀錄而保留。</div>
 <div class="note"><b>五條對照線</b>　<b>S3</b>=現行制度（sfg-v3＋fpx-v3）｜<b>S4</b>=sfg-v3＋fpx-v4（相對門檻）｜<b>B2</b>=無排除區｜<b>B1</b>=<u>同種子同數列但關閉全部過濾規則</u>｜<b>B0</b>=理論值<br>B1 是核心對照：與 S 共享 PRNG，<b>S−B1 ＝ 過濾規則的淨效果</b>。</div>
 <h2>每期平均命中碼數（12 碼中）</h2>
 <div class="scroll"><table><tr><th>彩種</th><th>理論</th><th>S3</th><th>S4</th><th>B2</th><th>B1</th><th>S3 三碼全中</th></tr>
@@ -127,28 +127,6 @@ padding-top:12px}
 <tr class="hl"><td></td><td>fpx-v4（相對門檻）</td><td>2.73 顆／空 7%</td><td>2.34 顆／空 7%</td><td class="mono">14.32%（理論 14.29%）</td></tr>
 </table></div>
 <div class="card"><b>fpx-v3 隨歷史累積而失效</b>：<span class="mono">ATRISK_MIN=20</span> 是絕對門檻，歷史越長越深的柱子越容易達標，而深度 40+ 的柱子上幾乎不會有號碼 ⇒ 排除區趨向永遠為空。產線 <span class="mono">all_records</span> 只增不減，故此趨勢不可逆。<br><b>fpx-v4</b>（門檻改 <span class="mono">max(20, 5%×總樣本)</span>）讓排除區規模在長短窗下穩定。<b>但 T3 顯示 v3 與 v4 的排除區命中率都與理論無異</b>（六個檢定全部不顯著）—— 修好的是<b>穩定性</b>，不是<b>效果</b>。</div>
-<h2>「10 不出」方案實測</h2>
-<div class="note">問題：選 10 個號碼賭「全部不出」，用 fpx 平坦度邏輯挑，是否優於隨機挑？<br><b>判定用「出現」口徑</b>：全不出 ＝ 10 碼都不在【主 6 ＋ 特碼】共 7 碼中。<br>理論機率 = C(39,7)/C(49,7) = <b>17.906%</b>，保本賠率 <b>5.585</b>（<b>含本金</b>，即中了拿回 5.585 元含本金在內；換成淨賠率是 4.585）。</div>
-<div class="scroll"><table><tr><th>挑法</th><th>可評估期</th><th>全不出</th><th>實際機率</th><th>vs 理論</th><th>p</th><th>保本賠率<br>(含本金)</th></tr>
-<tr><td>fpx-主6（現行產線邏輯）</td><td>2080</td><td>390</td><td>18.75%</td><td class="mono">+4.7%</td><td class="mono">0.3291</td><td class="mono">5.333</td></tr>
-<tr><td>fpx-含特碼</td><td>2085</td><td>367</td><td>17.60%</td><td class="mono">-1.7%</td><td class="mono">0.7391</td><td class="mono">5.681</td></tr>
-<tr><td>隨機對照</td><td>2086</td><td>375</td><td>17.98%</td><td class="mono">+0.4%</td><td class="mono">0.9549</td><td class="mono">5.563</td></tr>
-<tr class="hl"><td><b>理論值</b></td><td>—</td><td>—</td><td><b>17.91%</b></td><td>—</td><td>—</td><td class="mono"><b>5.585</b></td></tr>
-</table></div>
-<div class="card"><b>判定：三種挑法全部不顯著，fpx 邏輯挑的 10 碼跟隨機亂挑沒有差別。</b><br>把特碼納入 fpx 的 dist／gaps 計算（B 線）也沒有改善，實際比現行邏輯還低一點（同樣不顯著）。<br>⚠️ 效力：本樣本僅能偵測 <b>±9.4%</b> 的相對效果，p&gt;0.05 ＝「排除了大於此幅度的優勢」，不是「證明完全沒有優勢」。<br><br>🔴 <b>因此這個玩法的期望值完全由賠率決定，選號方法不影響。</b>賠率（含本金）低於 <b>5.585</b> 就是負期望，不管怎麼挑號。<br>※ 若用「特碼不計」的舊算法，會誤算成 23.331%、保本賠率只要 4.286 —— <b>賠率落在 4.29～5.58 之間會看起來是正期望，實際上是負的。</b></div>
-<h3>不同 N 的保本賠率（含本金，判定含特碼）</h3>
-<div class="scroll"><table><tr><th>N</th><th>全不出機率</th><th>保本賠率</th><th>莊家給 5.0 的抽水</th><th>給 6.0 的抽水</th></tr>
-<tr><td>6</td><td>37.513%</td><td class="mono">2.666</td><td class="mono">-87.6%</td><td class="mono">-125.1%</td></tr>
-<tr><td>7</td><td>31.406%</td><td class="mono">3.184</td><td class="mono">-57.0%</td><td class="mono">-88.4%</td></tr>
-<tr><td>8</td><td>26.172%</td><td class="mono">3.821</td><td class="mono">-30.9%</td><td class="mono">-57.0%</td></tr>
-<tr><td>9</td><td>21.704%</td><td class="mono">4.608</td><td class="mono">-8.5%</td><td class="mono">-30.2%</td></tr>
-<tr class="hl"><td>10</td><td>17.906%</td><td class="mono">5.585</td><td class="mono">+10.5%</td><td class="mono">-7.4%</td></tr>
-<tr><td>11</td><td>14.692%</td><td class="mono">6.807</td><td class="mono">+26.5%</td><td class="mono">+11.8%</td></tr>
-<tr><td>12</td><td>11.985%</td><td class="mono">8.344</td><td class="mono">+40.1%</td><td class="mono">+28.1%</td></tr>
-<tr><td>13</td><td>9.718%</td><td class="mono">10.290</td><td class="mono">+51.4%</td><td class="mono">+41.7%</td></tr>
-<tr><td>14</td><td>7.828%</td><td class="mono">12.774</td><td class="mono">+60.9%</td><td class="mono">+53.0%</td></tr>
-</table></div>
-<div class="card">抽水 ＝ 1 − 賠率×機率，正數就是你長期輸掉的比例。<br>對照：<b>台灣彩券官方的抽水約 44.2%</b>。所以就算「N 不出」是負期望，抽水率仍可能遠低於買官方彩券 —— <b>但負期望就是負期望，長期一定輸，只是輸得比較慢。</b><br>⚠️ 莊家不可能對所有 N 給同一個賠率，實際賠率必隨 N 遞增；本表僅供對照你拿到的報價落在哪一側。</div>
 <h2>效力分析（必讀）</h2>
 <div class="warnbox">本回測可偵測的相對效果為 <b>539 ±2.04%、F5 ±1.90%、六合 ±3.39%</b>（2 SD，兌獎口徑）。<br><b>因此，p &gt; 0.05 的正確講法是「排除了大於上述幅度的效果」，不是「證明沒有差異」。</b></div>
 <h2>預先承諾行動的執行</h2>

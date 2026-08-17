@@ -40,12 +40,11 @@ V4_FRAC = 0.05          # fpx-v4：at_risk 門檻 = max(ATRISK_MIN, V4_FRAC × d
 #   [兌獎] 特別號**不計**，只對主 6 碼 —— 與產線 build_log_entries 一致，維持不動。
 #          用於 T1/T2/T5 的命中數與三碼全中。
 #   [出現] 特別號**要計**，主 6 碼 ＋ 特碼共 7 碼 —— 判斷「這個號碼到底有沒有開出」，
-#          用於不出牌／排除區的命中判定（excludedHits）。鈞洋：「特碼必須有算，
-#          是要給不出牌方案知道的」。
+#          用於排除區的命中判定（excludedHits）。
 #
 # ⚠️ 2026-08-16 稍早曾誤把兌獎也改成 7 碼，已更正回 6 碼。
 SCORE_DRAW = {"539": 5, "f5": 5, "m6": 6}      # 兌獎口徑
-APPEAR_DRAW = {"539": 5, "f5": 5, "m6": 7}     # 「有沒有出現」口徑（不出牌用）
+APPEAR_DRAW = {"539": 5, "f5": 5, "m6": 7}     # 「有沒有出現」口徑
 DATA_FILE = {"539": "backtest_data_539.json",
              "f5": "backtest_data_f5.json",
              "m6": "backtest_data_m6.json"}
@@ -120,7 +119,7 @@ def winning_nums(game, rec):
 
 
 def appeared_nums(game, rec):
-    """**「有沒有出現」**用的號碼。六合＝主 6 碼 ＋ 特別號，供不出牌判定。"""
+    """**「有沒有出現」**用的號碼。六合＝主 6 碼 ＋ 特別號，供排除區命中判定。"""
     if game == "m6":
         e = rec.get("e")
         if not e:
@@ -243,7 +242,7 @@ def run_game(game, limit=None, progress_every=500):
                 "relaxed": ln["relaxed"],
                 "nExcl": len(ln["excl"]),
                 # 排除區「命中」＝該號有出現，故用**出現口徑**（六合含特碼），
-                # 不是兌獎口徑。不出牌方案在意的是號碼到底有沒有開出。
+                # 不是兌獎口徑：這裡問的是「號碼到底有沒有開出」。
                 "exclHits": len(set(ln["excl"]) & set(appeared)),
             }
         rows.append(row)

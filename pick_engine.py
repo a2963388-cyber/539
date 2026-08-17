@@ -30,8 +30,6 @@ pick_engine — 期號種子可重現選號引擎（sfg-v4）
 
   ※ `flatness_exclude()` 函式**保留但已退役**，只供回測與歷史審計使用，
     產線路徑（gen_pending_core）不再呼叫它。
-  ※ 「N 不出」投注玩法的相關結論見 ~/Documents/mark6/（回測證實
-    用 fpx 邏輯挑號與隨機挑無異，該玩法期望值完全由賠率決定）。
 
 目標
 ----
@@ -88,15 +86,6 @@ pick_engine — 期號種子可重現選號引擎（sfg-v4）
        六合 v4 14.32% vs 理論 14.29%，p=0.96 —— 六合用**出現口徑** 7/49）
        ⇒ fpx 無預測價值，與本檔下方「預期長期與隨機基準無異」的事前宣告一致。
 
-  [「N 不出」實測] 2026-08-16 鈞洋提問而加測（backtest_notout.py，六合 2086 期）：
-       選 10 碼賭「全部不出」（判定含特碼），三種挑法全部不顯著 ——
-       fpx-主6 18.75%(p=0.33)／fpx-含特碼 17.60%(p=0.74)／隨機 17.98%(p=0.95)，
-       理論 17.906%。**用 fpx 邏輯挑跟隨機亂挑沒有差別**；把特碼納入 dist/gaps
-       計算也沒有改善。⇒ 該玩法期望值**完全由賠率決定**，保本淨賠率 4.585。
-       ⚠️ 效力只能偵測 ±9.4% 相對效果。
-       ⚠️ 若誤用「特碼不計」算，會得到 23.331%、保本賠率僅 3.286 ——
-         **賠率落在 3.29~4.58 之間會看起來正期望，實際是負的。**
-
   [T4] 號碼入選均勻度：539/F5**極度顯著**（χ²≈1762/1996, df=38），六合正常（χ²=35）。
        診斷：**G3 的直接數學後果，不是缺陷**。539/F5 的 pool=39，≥32 只有 8 個號碼
        要供應「12 碼至少 3 顆高號」⇒ 32-39 入選率被推到均勻值的 **132%**、
@@ -120,7 +109,7 @@ pick_engine — 期號種子可重現選號引擎（sfg-v4）
        候選解 fpx-v4（門檻改 max(20, 5%×總樣本)）已回測驗證可使規模長短窗穩定，
        但 T3 顯示 v3/v4 皆無預測價值 ⇒ **修好的是穩定性，不是效果**。尚未拍板進產線。
 
-規格（sfg-v3）
+規格（sfg-v4）
 --------------
 彩種常數：
     game   POOL_MAX  SALT  號域（zone = n // 10）
@@ -137,9 +126,10 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     ※ 種子仍取 last_period（上期期號），此點 v3 未變。
 
 抽取程序：
-    候選池 P = {1..POOL_MAX} ∖ excluded（fpx-v3 排除區）
-              ※ v3 起不再扣除 last_draw
-    池 < MIN_POOL 依 (h高→低,深度淺→深,小號) 回補並記 relaxed:"pool"
+    候選池 P = {1..POOL_MAX}
+              ※ v3 起不再扣除 last_draw；**v4 起不再扣除排除區**（fpx 已廢除）
+              ※ 回測可經 gen_four_groups(excluded=…) 傳入排除區模擬舊制，
+                此時池 < MIN_POOL 會依 readmit_order 回補並記 relaxed:"pool"
     高號區門檻 hi 初始 32；若 |{hi..POOL_MAX} ∩ P| < MIN_HIGH_TOTAL(3)
     則 hi 每次減 2，直到湊滿 3 個高號候選，實際 hi 記入輸出。
 
@@ -178,24 +168,22 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
          一組 3 碼全中 C(6,3)/C(49,3) ≈ 1/921。
 
   [出現] 特別號**要計**，主 6 碼 ＋ 特碼共 7 碼。
-         → 用於判斷「這個號碼到底有沒有開出」，即**不出牌／排除區的命中判定**。
-         鈞洋原話：「特碼必須有算，是要給不出牌方案知道的」。
-         單碼出現率 7/49 = 14.29%（不是兌獎的 6/49 = 12.24%）。
+         → 用於判斷「這個號碼到底有沒有開出」（單碼出現率 7/49 = 14.29%，
+           不是兌獎的 6/49 = 12.24%）。
+         ※ v4 廢除排除區後，產線已無處使用此口徑；保留說明供回測與
+           歷史 excludedHits 的解讀，兩者不可混用。
 
-  ⚠️ 目前 fpx 的 dist／gaps 仍只吃主 6 碼（本檔 build_return_dist／current_gaps），
-     即排除區的「沉寂深度」統計尚未含特碼。是否改用 7 碼待拍板 ——
-     實測改了也沒有改善（見下方「N 不出」回測）。
-
-輸出（BASE_PENDING v3 之核心，ts 由呼叫端補）：
-    {"v":3, "algo":"sfg-v3", "seed":<last_period>, "forPeriod":<last_period+1>,
+輸出（BASE_PENDING v4 之核心，ts 由呼叫端補）：
+    {"v":4, "algo":"sfg-v4", "seed":<last_period>, "forPeriod":<last_period+1>,
      "hi":<實際門檻>, "minHigh":3, "relaxed":[...],
-     "strategies":{"A":[a,b,c], "B":[...], "C":[...], "D":[...]},
-     "excluded":[...], "exclAlgo":"fpx-v3", "exclDepths":[...]}
+     "strategies":{"A":[a,b,c], "B":[...], "C":[...], "D":[...]}}
+    ※ v4 起**不再有** excluded / exclAlgo / exclDepths 欄位（fpx 已廢除）。
+      舊 v2/v3 的 PICKLOG 條目仍帶這些欄位，頁面分段統計照舊。
     ※ forPeriod 僅供顯示；跨年改號（如六合 26/xxx→27/001）時以實際開獎為準。
 
 驗算（給親友）：
-    python3 pick_engine.py 539            # 讀公開 data 檔重算排除區＋四組
-    python3 pick_engine.py 539 115192 "5,11,24,31,32" --excluded "8,15,..."
+    python3 pick_engine.py 539            # 讀公開 data 檔重算本期四組
+    python3 pick_engine.py 539 115192 "5,11,24,31,32"
     python3 pick_engine.py --selftest
 """
 
