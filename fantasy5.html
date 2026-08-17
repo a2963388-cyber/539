@@ -252,7 +252,7 @@ function reconstructLastReport() {
   const zd = {1:0,2:0,3:0,4:0};
   sorted.forEach(n => {zd[Z(n)]++;});
   const repeatNums = rec[1] ? sorted.filter(n => rec[1].n.includes(n)) : [];
-  lastReport = {period:pv, nums:sorted, drawn, zoneDist:zd, repeatNums};
+  lastReport = {period:pv, nums:sorted, drawn, zoneDist:zd, repeatNums, idx:0};
 }
 
 // localStorage 在 iOS file:// 下可能被封鎖，統一包 try/catch
@@ -267,13 +267,13 @@ function load() {
   const storedRec = r ? JSON.parse(r) : null;
   // Auto-upgrade: if stored data is behind BASE_REC, reset to BASE_REC
   if (!storedRec || storedRec[0]?.p < BASE_REC[0].p) {
-    rec     = JSON.parse(JSON.stringify(BASE_REC));
+    rec     = JSON.parse(JSON.stringify(BASE_REC)); _dormTbl=null;
     st      = JSON.parse(JSON.stringify(BASE_ST));
     retHist = buildRetHistFromRec(rec, 39);
     conStat = buildConStat(rec);
     save();
   } else {
-    rec     = storedRec;
+    rec     = storedRec; _dormTbl=null;
     st      = s ? JSON.parse(s) : JSON.parse(JSON.stringify(BASE_ST));
     const parsedH = h ? JSON.parse(h) : null;
     retHist = (parsedH && Object.keys(parsedH).length > 0) ? parsedH : buildRetHistFromRec(rec, 39);
@@ -470,6 +470,45 @@ function sameDormancyOthers(i, d) {
   return out;
 }
 
+
+// 產生「同沉寂期數對照」區塊。idx＝該期在 rec 的索引；items＝[{n, d 或 abBefore}]
+// 三個地方共用：歷史查詢展開列、本期快報、歷史單期詳情。
+function sameDormancyBlock(idx, items) {
+  if (idx === undefined || idx === null || !rec[idx]) return '';
+  const byD = {};
+  items.forEach(x => {
+    const d = (x.d !== undefined) ? x.d : x.abBefore;
+    if (byD[d] === undefined) byD[d] = { drawn: [], others: sameDormancyOthers(idx, d) };
+    byD[d].drawn.push(x.n);
+  });
+  const ds = Object.keys(byD).map(Number).sort((a, b) => a - b);
+  return `<div style="border-top:1px dashed var(--border);padding-top:8px;margin-top:8px">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:5px;font-weight:600">
+      🔍 同沉寂期數對照 — 一樣沉寂那麼久，誰開了、誰沒開
+    </div>
+    ${ds.map(d => {
+      const g = byD[d], tot = g.drawn.length + g.others.length;
+      const rate = (g.drawn.length / tot * 100).toFixed(0);
+      return `<div style="background:#fff;padding:5px 8px;border-radius:7px;border:1px solid var(--border);margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:.7rem">
+          <b style="color:#0f172a;white-space:nowrap">沉寂 ${d} 期</b>
+          <span style="color:#16a34a">開出</span>
+          ${g.drawn.map(n => `<span class="ball ball-sm ${ZC[Z(n)]}">${f2(n)}</span>`).join('')}
+          ${g.others.length ? `<span style="color:var(--muted)">未開出</span>
+            ${g.others.map(n => `<span class="ball ball-sm ${ZC[Z(n)]}" style="opacity:.35">${f2(n)}</span>`).join('')}`
+            : `<span style="color:var(--muted)">（此深度沒有別的號碼）</span>`}
+          <span style="margin-left:auto;color:#64748b;white-space:nowrap">
+            ${tot} 碼中開 ${g.drawn.length} 碼 = <b>${rate}%</b></span>
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;line-height:1.6">
+      ⚖️ 每個深度的開出率長期都會回到 <b>12.82%</b>（＝開出碼數／號池），與沉寂多久無關。
+      單期的百分比是小樣本波動，不代表該深度比較容易開。
+    </div>
+  </div>`;
+}
+
 function toggleRptDetail(id) {
   const el=document.getElementById(id);
   if(el) el.style.display = el.style.display==='none'?'table-row':'none';
@@ -525,9 +564,9 @@ function renderReportHistory(el) {
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <input id="rpt-q" type="text" placeholder="搜尋 Draw #（如 11916）或號碼（如 08）"
           value="${rptHistFilter}"
-          oninput="rptHistFilter=this.value; renderReport(document.getElementById('tab-content'))"
+          oninput="rptHistFilter=this.value; renderReport(document.getElementById('content'))"
           style="flex:1;min-width:160px;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.85rem;outline:none">
-        ${q?`<button onclick="rptHistFilter='';renderReport(document.getElementById('tab-content'))"
+        ${q?`<button onclick="rptHistFilter='';renderReport(document.getElementById('content'))"
           style="border:none;background:#e2e8f0;border-radius:8px;padding:6px 10px;font-size:.8rem;cursor:pointer">✕ 清除</button>`:''}
         <span style="font-size:.75rem;color:var(--muted);white-space:nowrap">${periods.length} / ${rec.length} 期</span>
       </div>
@@ -579,42 +618,7 @@ function renderReportHistory(el) {
                     </div>`;
                   }).join('')}
                 </div>
-                ${(()=>{
-                  // ── 同沉寂期數對照（2026-08-18 新增）──
-                  // 按沉寂深度分組：同一深度裡，哪些開出了、哪些沒開出。
-                  const byD = {};
-                  p.details.forEach(x=>{
-                    if(!byD[x.d]) byD[x.d] = {drawn:[], others: sameDormancyOthers(p.i, x.d)};
-                    byD[x.d].drawn.push(x.n);
-                  });
-                  const ds = Object.keys(byD).map(Number).sort((a,b)=>a-b);
-                  return `<div style="border-top:1px dashed var(--border);padding-top:8px">
-                    <div style="font-size:.7rem;color:var(--muted);margin-bottom:5px;font-weight:600">
-                      🔍 同沉寂期數對照 — 一樣沉寂那麼久，誰開了、誰沒開
-                    </div>
-                    ${ds.map(d=>{
-                      const g = byD[d];
-                      const tot = g.drawn.length + g.others.length;
-                      const rate = (g.drawn.length/tot*100).toFixed(0);
-                      return `<div style="background:#fff;padding:5px 8px;border-radius:7px;border:1px solid var(--border);margin-bottom:4px">
-                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:.7rem">
-                          <b style="color:#0f172a;white-space:nowrap">沉寂 ${d} 期</b>
-                          <span style="color:#16a34a">開出</span>
-                          ${g.drawn.map(n=>`<span class="ball ball-sm ${ZC[Z(n)]}">${f2(n)}</span>`).join('')}
-                          ${g.others.length?`<span style="color:var(--muted)">未開出</span>
-                            ${g.others.map(n=>`<span class="ball ball-sm ${ZC[Z(n)]}" style="opacity:.35">${f2(n)}</span>`).join('')}`
-                            :`<span style="color:var(--muted)">（此深度沒有別的號碼）</span>`}
-                          <span style="margin-left:auto;color:#64748b;white-space:nowrap">
-                            ${tot} 碼中開 ${g.drawn.length} 碼 = <b>${rate}%</b></span>
-                        </div>
-                      </div>`;
-                    }).join('')}
-                    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;line-height:1.6">
-                      ⚖️ 每個深度的開出率長期都會回到 <b>${(5/39*100).toFixed(2)}%</b>（＝開出碼數／號池），
-                      與沉寂多久無關。單期的百分比是小樣本波動，不代表該深度比較容易開。
-                    </div>
-                  </div>`;
-                })()}
+                ${sameDormancyBlock(p.i, p.details)}
               </td>
             </tr>`;
           }).join('')}
@@ -669,6 +673,7 @@ function renderHistReport(el) {
         <td style="font-size:.78rem">${noteR(d)}</td>
       </tr>`).join('')}</tbody>
     </table>
+    ${sameDormancyBlock(R.idx, R.drawn)}
   </div>
   <div class="card">
     <h3>📊 本期區間分佈</h3>
@@ -796,6 +801,7 @@ function renderReport(el){
         <td style="font-size:.78rem">${note(d)}</td>
       </tr>`).join('')}</tbody>
     </table>
+    ${sameDormancyBlock(R.idx, R.drawn)}
   </div>
 
   <div class="card">
@@ -1452,7 +1458,7 @@ function renderRecords(el){
 
 function delRec(i){
   if(!confirm(`確認刪除 Draw ${rec[i].p}？`)) return;
-  rec.splice(i,1);
+  rec.splice(i,1); _dormTbl=null;
   save();
   render();
 }
@@ -1809,7 +1815,7 @@ function applyStats(){
 
 function resetAll(){
   if(!confirm('確認重設全部資料回預設值？\n（含開獎紀錄、統計、押注紀錄）')) return;
-  rec=JSON.parse(JSON.stringify(BASE_REC));
+  rec=JSON.parse(JSON.stringify(BASE_REC)); _dormTbl=null;
   st=JSON.parse(JSON.stringify(BASE_ST));
   retHist={};
   conStat=buildConStat(rec);
@@ -1885,7 +1891,7 @@ function addDraw(){
   ANNUAL = buildAnnual(rec);
   save();
 
-  lastReport={period:pv,nums:sorted,drawn,zoneDist:zd,repeatNums};
+  lastReport={period:pv,nums:sorted,drawn,zoneDist:zd,repeatNums,idx:0};
 
   // clear inputs
   document.getElementById('inp-period').value='';
