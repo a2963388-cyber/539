@@ -145,8 +145,11 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     高號下限引導（保證 G3 成立的構造）：
         抽第 gi 組（0-based）時，令 have = 已用掉的高號數、
         still = max(0, MIN_HIGH_TOTAL − have)、after = 3 − gi（本組之後的組數），
-        則本組最少高號數 min_high = max(0, still − 3 × after)。
-        故 D 組必被要求補足全部缺口，G3 由構造保證。
+        則本組最少高號數 min_high = max(0, still − 2 × after)。
+        ※ 係數是 **2 不是 3**（每組承載上限記 2）：539/F5 的高號 32-39 全落在同一個
+          zone 3，若讓最後一組扛滿 3 顆必然三碼同域而撞 R4 —— 實測 539 有 7 期因此
+          掉進 relaxed，期 115066 更一路崩到 lex 兜底。記 2 使壓力提前一組分擔。
+        故 C 組可能被要求 1 顆、D 組必被要求補足其餘缺口，G3 由構造保證。
 
     四組完成後全域檢查：
         G1 12 碼互不重複（由構造保證）
@@ -357,7 +360,7 @@ def _lex_fallback(pool, hi, pool_max):
 #
 # ⚠️ 產線路徑（gen_pending_core）**不再呼叫本區任何函式**。
 #    保留原因：①歷史 PICKLOG 的 excluded/excludedHits 需要本規格才能解讀
-#              ②backtest.py / backtest_notout.py 仍用它做對照組
+#              ②backtest.py 與本機的私人分析腳本仍用它做對照組
 #    廢除理由見本檔開頭「v4 變更紀錄」。**不要再把它接回產線。**
 #
 # 規則（鈞洋 2026-08-16 拍板，取代 v2）：

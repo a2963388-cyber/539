@@ -249,65 +249,8 @@ def build():
       '讓排除區規模在長短窗下穩定。<b>但 T3 顯示 v3 與 v4 的排除區命中率都與理論無異</b>'
       '（六個檢定全部不顯著）—— 修好的是<b>穩定性</b>，不是<b>效果</b>。</div>')
 
-    # N 不出
-    nop = os.path.join(HOME, "backtest_notout_results.json")
-    if os.path.exists(nop):
-        no = json.load(open(nop, encoding="utf-8"))
-        k = no["k"]
-        A(f'<h2>「{k} 不出」方案實測</h2>')
-        A(f'<div class="note">問題：選 {k} 個號碼賭「全部不出」，'
-          f'用 fpx 平坦度邏輯挑，是否優於隨機挑？'
-          f'<br><b>判定用「出現」口徑</b>：全不出 ＝ {k} 碼都不在【主 6 ＋ 特碼】共 7 碼中。'
-          f'<br>理論機率 = C({49-k},7)/C(49,7) = <b>{no["theoryP"]*100:.3f}%</b>，'
-          f'保本賠率 <b>{no["theoryOddsGross"]:.3f}</b>'
-          f'（<b>含本金</b>，即中了拿回 {no["theoryOddsGross"]:.3f} 元含本金在內；'
-          f'換成淨賠率是 {no["theoryOddsNet"]:.3f}）。</div>')
-        A('<div class="scroll"><table><tr><th>挑法</th><th>可評估期</th>'
-          '<th>全不出</th><th>實際機率</th><th>vs 理論</th><th>p</th>'
-          '<th>保本賠率<br>(含本金)</th></tr>')
-        for t in ("A", "B", "C"):
-            if t not in no["lines"]:
-                continue
-            L = no["lines"][t]
-            A(f'<tr><td>{L["name"]}</td><td>{L["n"]}</td><td>{L["win"]}</td>'
-              f'<td>{L["rate"]*100:.2f}%</td>'
-              f'<td class="mono">{L["vsTheory"]*100:+.1f}%</td>'
-              f'<td class="mono">{pf(L["p"])}</td>'
-              f'<td class="mono">{L["breakEvenGross"]:.3f}</td></tr>')
-        A(f'<tr class="hl"><td><b>理論值</b></td><td>—</td><td>—</td>'
-          f'<td><b>{no["theoryP"]*100:.2f}%</b></td><td>—</td><td>—</td>'
-          f'<td class="mono"><b>{no["theoryOddsGross"]:.3f}</b></td></tr>')
-        A('</table></div>')
-        A('<div class="card"><b>判定：三種挑法全部不顯著，'
-          'fpx 邏輯挑的 10 碼跟隨機亂挑沒有差別。</b>'
-          '<br>把特碼納入 fpx 的 dist／gaps 計算（B 線）也沒有改善，'
-          '實際比現行邏輯還低一點（同樣不顯著）。'
-          f'<br>⚠️ 效力：本樣本僅能偵測 <b>±{no["detectable"]*100:.1f}%</b> 的相對效果，'
-          'p&gt;0.05 ＝「排除了大於此幅度的優勢」，不是「證明完全沒有優勢」。'
-          '<br><br>🔴 <b>因此這個玩法的期望值完全由賠率決定，選號方法不影響。</b>'
-          f'賠率（含本金）低於 <b>{no["theoryOddsGross"]:.3f}</b> 就是負期望，'
-          '不管怎麼挑號。'
-          '<br>※ 若用「特碼不計」的舊算法，會誤算成 23.331%、保本賠率只要 4.286 —— '
-          '<b>賠率落在 4.29～5.58 之間會看起來是正期望，實際上是負的。</b></div>')
-        # 不同 N 的保本線
-        A('<h3>不同 N 的保本賠率（含本金，判定含特碼）</h3>')
-        A('<div class="scroll"><table><tr><th>N</th><th>全不出機率</th>'
-          '<th>保本賠率</th><th>莊家給 5.0 的抽水</th>'
-          '<th>給 6.0 的抽水</th></tr>')
-        for N in range(6, 15):
-            p = math.comb(49 - N, 7) / math.comb(49, 7)
-            cls = ' class="hl"' if N == k else ''
-            A(f'<tr{cls}><td>{N}</td><td>{p*100:.3f}%</td>'
-              f'<td class="mono">{1/p:.3f}</td>'
-              f'<td class="mono">{(1-5.0*p)*100:+.1f}%</td>'
-              f'<td class="mono">{(1-6.0*p)*100:+.1f}%</td></tr>')
-        A('</table></div>')
-        A('<div class="card">抽水 ＝ 1 − 賠率×機率，正數就是你長期輸掉的比例。'
-          '<br>對照：<b>台灣彩券官方的抽水約 44.2%</b>。'
-          '所以就算「N 不出」是負期望，抽水率仍可能遠低於買官方彩券 —— '
-          '<b>但負期望就是負期望，長期一定輸，只是輸得比較慢。</b>'
-          '<br>⚠️ 莊家不可能對所有 N 給同一個賠率，實際賠率必隨 N 遞增；'
-          '本表僅供對照你拿到的報價落在哪一側。</div>')
+    # ⚠️ 一段與本站無關的私人分析已於 2026-08-18 移出本檔（Fable 5 稽核）。
+    #    ~/539 會 push 到公開 GitHub Pages，私人內容一律留在本機的私人目錄。
 
     # 效力
     A('<h2>效力分析（必讀）</h2>')

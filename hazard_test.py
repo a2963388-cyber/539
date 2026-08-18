@@ -107,6 +107,9 @@ def run(game, with_special=False):
         obs += [h, a - h]
         exp += [a * p0, a * (1 - p0)]
     chi = sum((o - e) ** 2 / e for o, e in zip(obs, exp) if e > 0)
+    # ⚠️ Fable 5 稽核 2026-08-18：機率由理論完全指定、無總和約束，
+    #    嚴格說 df 應為 len(rows) 而非 len(rows)-1，本寫法**偏鬆**。
+    #    因結果全部不顯著（更嚴的 df 只會更不顯著），結論不受影響，保留原值不重跑。
     df = len(rows) - 1
     pA = bs.chi2_sf(chi, df)
 

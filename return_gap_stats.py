@@ -77,8 +77,10 @@ def theory(k, pool, draw):
 def chi2_fit(cnt, total, pool, draw, kmax=20):
     """卡方適合度：實測分佈 vs 幾何理論。
 
-    只取 k <= kmax（右設限主要影響長間隔區，納入會製造假的偏離），
-    並把尾巴併成一格，確保每格期望值足夠大。
+    只取 k <= kmax（右設限主要影響長間隔區，納入會製造假的偏離）。
+    尾巴格（k > kmax）**不納入卡方檢定**——它正是被右設限壓低的區域，
+    納入會用被污染的格子去檢定「有沒有被污染」，方法上矛盾。
+    尾巴格仍會算出來（tail_obs / tail_exp）供報表列示參考，但不進 obs/exp。
     """
     import backtest_stats as bs
     obs, exp, labels = [], [], []
@@ -88,12 +90,8 @@ def chi2_fit(cnt, total, pool, draw, kmax=20):
         labels.append(str(k))
     tail_obs = sum(c for k, c in cnt.items() if k > kmax)
     tail_exp = total - sum(exp)
-    if tail_exp > 5:
-        obs.append(tail_obs)
-        exp.append(tail_exp)
-        labels.append(f">{kmax}")
     r = bs.chi2_gof(obs, exp)
-    return r, labels, obs, exp
+    return r, labels, obs, exp, tail_obs, tail_exp
 
 
 def report(game, year, with_special=False):

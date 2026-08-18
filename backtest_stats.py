@@ -168,8 +168,10 @@ def hypergeom_group(pool_max, draw, k):
 
 def analyse(game, rows):
     cfg = GAMES[game]
-    # 🔴 一律用兌獎口徑的 draw（六合＝7，含特別號），不是 GAMES[game]["draw"]（＝6，
-    # 那是排除區／平坦度的參數）。2026-08-16 更正前誤用後者，六合結論全部低估。
+    # 🔴 一律用**兌獎**口徑的 draw（六合＝6，特別號不計）——本函式的 T1/T2/T5 都是
+    # 兌獎檢定。T3 另用「出現」口徑（六合＝7，見下方 p0_appear）。
+    # ⚠️ 2026-08-18 更正：本註解原寫「六合＝7」，與程式（SCORE_DRAW["m6"]=6）相反，
+    #    是 2026-08-16 已撤銷的修訂 a 留下的殘骸。程式一直是對的。
     pool_max, draw = cfg["pool_max"], SCORE_DRAW[game]
     p0 = draw / pool_max
     n_periods = len(rows)
@@ -203,6 +205,12 @@ def analyse(game, rows):
         res[f"T3_{tag}"]["avgSize"] = nx / n_periods
 
     # T4 號碼入選均勻度
+    # ⚠️ 已知近似（Fable 5 稽核 2026-08-18）：每期固定選 12 個**相異**號，
+    #    各號入選數在期內負相關，變異數小於 multinomial ⇒ 本 χ² **系統性偏小、偏保守**。
+    #    證據就在自家數據：B1 的 χ²=7.2(df=38) p=1.0000——那是無放回設計的「過度均勻」，
+    #    **不是「完全均勻的證明」**。方向性結論（S3 的 χ²≈1762 怎麼校正都顯著、
+    #    偏斜確為 G3 所致）不受影響，但本檢定**會漏掉中等程度的扭曲**。
+    #    若日後要用 T4 偵測細微扭曲，需改用模擬 null（打亂重抽建經驗分佈）。
     for tag in ("S3", "S4", "B1"):
         cnt = {n: 0 for n in range(1, pool_max + 1)}
         for r in rows:
@@ -216,6 +224,7 @@ def analyse(game, rows):
         res[f"T4_{tag}"]["exp"] = exp
 
     # T5 每組命中數分佈（4 組 × 期數）
+    # ⚠️ 同上：四組共享同一期開獎結果，組間**不獨立**，χ² 同樣偏保守。
     for tag in ("S3", "S4", "B1"):
         obs = [0, 0, 0, 0]
         for r in rows:
