@@ -708,9 +708,9 @@ function renderHistReport(el) {
     </div>
   </div>`:''}
   <div class="card">
-    <h3>🔁 本期回歸號碼 — 歷史沉寂統計</h3>
+    <h3>🔁 本期回歸號碼 — 近期沉寂統計（網頁紀錄 ${rec.length} 期）</h3>
     <table>
-      <thead><tr><th>號碼</th><th>本次沉寂</th><th>回歸次數</th><th>平均沉寂期</th><th>最短</th><th>最長</th></tr></thead>
+      <thead><tr><th>號碼</th><th>本次沉寂</th><th>回歸次數</th><th>近期平均沉寂</th><th>最短</th><th>最長</th></tr></thead>
       <tbody>${R.drawn.map(d=>{
         const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
         const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
@@ -821,9 +821,9 @@ function renderReport(el){
   </div>
 
   <div class="card">
-    <h3>🔁 本期回歸號碼 — 歷史沉寂統計</h3>
+    <h3>🔁 本期回歸號碼 — 近期沉寂統計（網頁紀錄 ${rec.length} 期）</h3>
     <table>
-      <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','cnt','回歸次數')}${thSort('rpt-ret','avg','平均沉寂期')}${thSort('rpt-ret','min','最短')}${thSort('rpt-ret','max','最長')}</tr></thead>
+      <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','cnt','回歸次數')}${thSort('rpt-ret','avg','近期平均沉寂')}${thSort('rpt-ret','min','最短')}${thSort('rpt-ret','max','最長')}</tr></thead>
       <tbody>${applySort(R.drawn.map(d=>{
         const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
         const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
@@ -1358,11 +1358,11 @@ function renderStats(el){
   </div>
 
   <div class="card">
-    <h3>🔁 回歸統計（實際回歸間隔）</h3>
+    <h3>🔁 回歸統計（近 ${rec.length} 期實際沉寂）</h3>
     ${numsWithHist.length === 0
       ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
       : `<table>
-      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','平均沉寂期')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
+      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
       <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','count','desc').map(({n,count,avg,min,max,last,diff}) => {
         const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
         return `<tr>
@@ -1721,7 +1721,7 @@ function renderSettings(el){
   <div class="card">
     <h3>📊 目前各號碼狀態</h3>
     <table>
-      <thead><tr>${thSort('cfg-st','n','號碼')}${thSort('cfg-st','ab','沉寂期')}${thSort('cfg-st','ag','平均間隔')}${thSort('cfg-st','mg','最大間隔')}${thSort('cfg-st','ratio','逾期倍數')}</tr></thead>
+      <thead><tr>${thSort('cfg-st','n','號碼')}${thSort('cfg-st','ab','沉寂期')}${thSort('cfg-st','ag','全歷史平均間隔')}${thSort('cfg-st','mg','全歷史最大間隔')}${thSort('cfg-st','ratio','逾期倍數')}</tr></thead>
       <tbody>${applySort(Array.from({length:49},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:st[n].ag,mg:st[n].mg,ratio:od(n),ex:excl(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio,ex})=>{
         return `<tr style="${ex?'background:#fee2e2':''}">
           <td>${ex?ballX(n,'ball-sm'):ball(n,'ball-sm')}</td>
