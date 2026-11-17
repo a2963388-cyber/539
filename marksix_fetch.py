@@ -53,7 +53,14 @@ def read_current_latest(html: str) -> int:
     return int(m.group(1)) if m else 0
 
 def read_latest_dt(html: str):
-    m = re.search(r'const BASE_REC = \[.*?"dt":"(\d{4}-\d{2}-\d{2})"', html, re.DOTALL)
+    # 🔴 2026-10-01 修：原本寫死 `"dt":"`，但 data_m6.js 存的是 **鍵沒有引號**的 `dt:"2026-09-26"`
+    #    ⇒ 這支函式從頭到尾都回 None。兩個後果：
+    #      ① main 裡那個「停更 N 天就跳桌面通知」的舊警告是死碼，一次都沒響過
+    #      ② 更要緊：fetch_from_pilio 的 `d['dt'] > latest_dt` 過濾被跳過 ——
+    #         主源 cpzhan 一旦失敗改走備援，就會把整頁歷史都當成新資料，
+    #         然後用 from_p+1、+2… 遞推期號寫進資料檔＝**期號錯位的資料污染**。
+    #    備援平常不會被觸發，所以這個洞一直沒浮出來。鍵有沒有引號都要吃。
+    m = re.search(r'const BASE_REC = \[.*?"?dt"?\s*:\s*"(\d{4}-\d{2}-\d{2})"', html, re.DOTALL)
     if m:
         from datetime import datetime
         return datetime.strptime(m.group(1), '%Y-%m-%d').date()
@@ -428,6 +435,70 @@ def update_html(new_draws: list, dry_run: bool = False,
 
 
 # ── 主程式 ────────────────────────────────────────────────────
+# 「我們是不是真的跟上了」的答案寫在這裡，給 daily_health_check.py 離線讀。
+STATUS_FILE = DATA_FILE.parent / ".m6_source_status.json"
+
+
+def verify_current(current_latest: int, latest_dt):
+    """沒有新資料時，去問來源「你自己的最新期是幾號」，用**期數**判斷落後與否。
+
+    🔴 2026-10-01 改掉原本的日曆天門檻（`gap_days >= 4` 就跳桌面通知）。
+    HKJC 的開獎日**不是固定二/四/六**，會因賽馬季與節慶調整，整週不開是正常現象：
+      ・2026-08-30 ~ 09-04 空窗一週（9/1、9/3 兩個「排定開獎日」都沒開）
+      ・2026-09-29、10-01 兩期停開（鈞洋 10/01 確認）
+    日曆天一到門檻就喊，等於每次停開都連噴好幾天假警報 ——
+    而 CLAUDE.md 寫得很清楚：**誤報比漏報更傷，警報一旦不可信就沒人看了**。
+    這是同一個坑第二次出現，所以照規矩寫進工具，不是再寫一次記憶。
+
+    判準改成三分法，而且只有後兩種才喊：
+      來源最新 == 本地最新  → 真的已是最新（不管隔了幾天）
+      來源最新 >  本地最新  → 真的落後，是抓取邏輯出問題
+      來源讀不到            → 這才是 2026-08-05 靜默換源那種事故
+    """
+    from datetime import datetime  # 模組層只 import 了 date，跟 read_latest_dt 同樣寫法
+    status = {
+        "checked_at": datetime.now().isoformat(timespec="seconds"),
+        "local_latest": current_latest,
+        "local_latest_dt": latest_dt.isoformat() if latest_dt else None,
+    }
+    try:
+        all_draws = fetch_from_cpzhan(0)      # from_p=0 → 整張表，取最大期
+        if not all_draws:
+            raise ValueError("來源表格解析不出任何一期")
+        newest = max(all_draws, key=lambda d: d["p"])
+        status.update({"source_ok": True, "source_latest": newest["p"],
+                       "source_latest_dt": newest["dt"]})
+    except Exception as e:  # noqa: BLE001
+        status.update({"source_ok": False, "error": str(e)})
+        msg = f"六合彩來源讀不到（{e}），無法確認資料是否最新，請手動檢查。"
+        subprocess.run(['osascript', '-e',
+                        f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'],
+                       capture_output=True)
+        print(f"⚠️ 來源驗證失敗：{e}")
+        _write_status(status)
+        return
+
+    if status["source_latest"] > current_latest:
+        behind = status["source_latest"] - current_latest
+        msg = f"六合彩落後！來源已到 {newest['draw']}（{newest['dt']}），本地停在 {current_latest}。"
+        subprocess.run(['osascript', '-e',
+                        f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'],
+                       capture_output=True)
+        print(f"⚠️ 真的落後 {behind} 期：來源 {newest['draw']}，本地 {current_latest}")
+    else:
+        print(f"✅ 來源最新也是 {newest['draw']}（{newest['dt']}）→ 確認已跟上，"
+              f"中間沒開的期數不是故障")
+    _write_status(status)
+
+
+def _write_status(status: dict):
+    try:
+        STATUS_FILE.write_text(json.dumps(status, ensure_ascii=False, indent=2),
+                               encoding="utf-8")
+    except OSError as e:  # noqa: BLE001
+        print(f"（狀態檔寫入失敗，不影響本次更新：{e}）")
+
+
 def main():
     parser = argparse.ArgumentParser(description="自動抓取香港六合彩最新開獎")
     parser.add_argument("--dry", action="store_true", help="只顯示，不寫入")
@@ -445,13 +516,7 @@ def main():
     draws = fetch_draws(current_latest, latest_dt)
     if not draws:
         print("✅ 無新資料（今日可能尚未開獎，或已是最新）")
-        if latest_dt:
-            gap_days = (date.today() - latest_dt).days
-            if gap_days >= 4:
-                draw_str = f"{current_latest//1000:02d}/{current_latest%1000:03d}"
-                msg = f"六合彩更新可能失敗！停在{draw_str}（{gap_days}天前），請手動檢查。"
-                subprocess.run(['osascript', '-e', f'display notification "{msg}" with title "⚠️ 彩券更新警告" sound name "Basso"'], capture_output=True)
-                print(f"⚠️ 資料已 {gap_days} 天未更新，已發送 macOS 通知")
+        verify_current(current_latest, latest_dt)
         return
 
     update_html(draws, dry_run=args.dry, force_repick=args.force_repick)

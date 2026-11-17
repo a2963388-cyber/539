@@ -8,3 +8,6 @@ cron.log
 # 只會讓每次改動都存一份完整副本，而且對驗算者沒有幫助（他們該自己跑一遍）。
 backtest_data_*.json
 backtest_v3_results.json
+
+# fetch 的來源比對結果，本機判定用，不需發佈到 Pages
+.m6_source_status.json
