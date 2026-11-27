@@ -2024,7 +2024,7 @@ document.querySelectorAll('.ni').forEach((inp,i,all)=>{
 function updateHdr(){
   const r=rec[0];
   document.getElementById('hdr-info').innerHTML=r
-    ?`最新：第 ${r.p} 期${dtTag(r.p)?' '+dtTag(r.p,true):''}<br>${r.n.map(f2).join(' ')}`
+    ?`最新：第 ${r.p} 期${dtTag(r.p)?' '+dtTag(r.p):''}<br>${r.n.map(f2).join(' ')}`
     :'尚無紀錄';
 }
 
