@@ -2,7 +2,7 @@
 //   舊版驗「頁面 JS 現算 vs Python BASE_PENDING vs 覆蓋度卡」三方一致——JS 生成層已於減法重構移除，
 //   新版改驗：(a) 三頁 script 於 vm 零錯誤（init + 各 render tab）
 //            (b) renderPick 輸出包含 BASE_PENDING 的全部號碼（頁面顯示 == 事前發布）
-//            (c) BASE_PENDING 為 v2 時做結構驗規：12碼不重複、避上期、每組 max≥hi、無等差、無同尾、號域覆蓋
+//            (c) BASE_PENDING 結構驗規（v>=2；v5 另驗三池）：12碼不重複、避上期、每組 max≥hi、無等差、無同尾、號域覆蓋
 //            (d) --recompute 時另呼叫 pick_engine.py 重算比對（頁面顯示 == Python 發布 == 規格重算）
 // 用法：node ~/539/verify_consistency.js [--new] [--recompute]
 //   --new       驗 *.html.new（手術後、覆蓋前的預檢）
@@ -60,6 +60,22 @@ function structCheck(game,pending,lastDraw){
     const hitEx=flat.filter(n=>ex.includes(n));
     if(hitEx.length) errs.push(`選號含排除區 ${hitEx}`);
     if(!Array.isArray(pending.exclDepths)) errs.push('缺 exclDepths');
+  }
+  // sfg-v5「三池」（2026-11-27）：pools 三類互斥、升冪、在號池內；選號 ⊆ 三池∪readmit；不得再帶 excluded
+  if(pending.v>=5){
+    const P=pending.pools;
+    if(!P||!['lz','gap1','od'].every(k=>Array.isArray(P[k]))) errs.push('v5 缺 pools');
+    else{
+      const all=[...P.lz,...P.gap1,...P.od];
+      if(new Set(all).size!==all.length) errs.push('三池不互斥');
+      for(const k of ['lz','gap1','od']) if(P[k].some((n,i)=>i&&P[k][i-1]>=n)) errs.push(`${k} 未升冪`);
+      if(all.some(n=>n<1||n>GAMES[game].pool)) errs.push('三池超出號池');
+      const allowed=new Set([...all,...(pending.readmit||[])]);
+      const out=flat.filter(n=>!allowed.has(n));
+      if(out.length) errs.push(`選號不在三池內 ${out}`);
+      if(lastDraw&&lastDraw.length&&JSON.stringify([...lastDraw].sort((a,b)=>a-b))!==JSON.stringify(P.lz)) errs.push('連莊池≠上期號碼');
+    }
+    if('excluded' in pending) errs.push('v5 不得帶 excluded');
   }
   return errs;
 }
@@ -156,8 +172,15 @@ function check(game,dataFile,htmlFile,label){
         const gotEx=mEx&&mEx[1].trim()?mEx[1].split(',').map(s=>+s.trim()):[];
         const groupsOk=JSON.stringify(got)===JSON.stringify(r.pend.strategies);
         const exOk=!/^fpx-v\d/.test(r.pend.exclAlgo||'')||JSON.stringify(gotEx)===JSON.stringify(r.pend.excluded||[]);
-        recompOk=groupsOk&&exOk;
-        parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區'));
+        // v5：三池也要與 Python 重算一致（POOLS 行）
+        let poolsOk=true;
+        if(r.pend.v>=5){
+          const mP=py.match(/^POOLS lz=\[([\d, ]*)\] gap1=\[([\d, ]*)\] od=\[([\d, ]*)\]/m);
+          const arr=x=>x.trim()?x.split(',').map(s=>+s.trim()):[];
+          poolsOk=!!mP&&JSON.stringify({lz:arr(mP[1]),gap1:arr(mP[2]),od:arr(mP[3])})===JSON.stringify({lz:r.pend.pools.lz,gap1:r.pend.pools.gap1,od:r.pend.pools.od});
+        }
+        recompOk=groupsOk&&exOk&&poolsOk;
+        parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區 ')+(poolsOk?'':'三池'));
       }
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }
   }

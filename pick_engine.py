@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pick_engine — 期號種子可重現選號引擎（sfg-v4）
+pick_engine — 期號種子可重現選號引擎（sfg-v5「三池」）
 =================================================
 
 事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12、
-         sfg-v3/fpx-v3 2026-08-16、**sfg-v4 2026-08-17**（皆鈞洋拍板）。
+         sfg-v3/fpx-v3 2026-08-16、sfg-v4 2026-08-17、**sfg-v5 2026-11-27**（皆鈞洋拍板）。
+
+═══ v5 變更紀錄（2026-11-27，鈞洋拍板；只往前生效，不回頭重算歷史）═══
+
+  **候選池改為「三池」聯集**（其餘規則全部沿用 v4）：
+    令 g(n)＝最新一期起連續未開出期數（最新一期含 n → 0；六合只計主 6 碼）
+    連莊 lz   ＝{n | g(n)=0}
+    隔一期 gap1＝{n | g(n)=1}
+    逾期 od   ＝{n | g(n)≥T}，T＝ceil(pool_max/draw − 1)：539/F5＝7、六合＝8（理論平均間隔）
+    候選池＝lz ∪ gap1 ∪ od（三類互斥）。池 < MIN_POOL 時依 (g 大→小, 號碼小→大) 自池外回補，
+    記 relaxed:"pool" 並輸出 readmit。歷史 < MIN_HIST 期不產號。
+
+  本條推翻 2026-08-18「sfg-v4 為終版」之裁決，鈞洋知情並決定。
+
+  誠實揭露（事前寫下、事後不改口）：中獎機率與期望值和隨機無異。
+    全歷史「每期開出 ≥2 顆逾期號」539 63.8%／F5 63.4%／六合 68.2%，
+    純隨機 64.4%／64.4%／69.1%（2026-11-27 實測）。本規則是可重現的選池慣例，不是預測訊號。
+
+  生效：539 第 115289 期、F5 第 12075 期、六合 26/126 起（之前已發布的 v4 號碼不抽換）。
+  全歷史回放（Fable 2026-11-27）：池大小最小 18/17/22、從未低於 MIN_POOL；無違規、無 lex 兜底。
+
+═══ v4 以前（歷史沿革）═══
 本檔即規格本身，任何人可依下述規則獨立重實作並得到逐位元相同的結果。
 
 ═══ v4 變更紀錄（2026-08-17，鈞洋拍板；只往前生效，不回頭重算歷史）═══
@@ -192,9 +213,9 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
 
 from itertools import combinations
 
-ALGO = "sfg-v4"   # v1(08-09)避上期；v2(08-12)加 fpx 排除區；v3(08-16)解除避上期+R1改全域；
+ALGO = "sfg-v5"   # v5(11-27)三池：連莊∪隔一期∪逾期； v1(08-09)避上期；v2(08-12)加 fpx 排除區；v3(08-16)解除避上期+R1改全域；
                   # v4(08-17)廢除 fpx 排除區（回測證實無預測價值且正在自我失效）
-ALGO_V = 4        # 寫進 BASE_PENDING 的 v 欄位；勿在別處寫死版號（見 verify_consistency.js 的坑）
+ALGO_V = 5        # 寫進 BASE_PENDING 的 v 欄位；勿在別處寫死版號（見 verify_consistency.js 的坑）
 MOD = 2147483647
 MULT = 48271
 
@@ -204,6 +225,9 @@ GAMES = {
     "m6":  {"pool_max": 49, "salt": 3, "zones": (0, 1, 2, 3, 4), "draw": 6},
 }
 
+# sfg-v5 三池：逾期門檻＝ceil(pool_max/draw − 1)（理論平均間隔，事前註冊、不隨資料漂移）
+OD_THRESHOLD = {"539": 7, "f5": 7, "m6": 8}
+MIN_HIST = 40          # 歷史不足不產號（與 build_log_entries 補結算門檻一致）
 MIN_POOL = 16          # 候選池下限：12 碼＋過濾規則的活動空間
 ATRISK_MIN = 20        # 平坦度深度樣本門檻（與頁面平坦度卡同值）
 EXCL_BARS = 2          # fpx-v3：只取距基準最低的柱子根數，上面有幾顆算幾顆
@@ -406,6 +430,24 @@ def current_gaps(records, pool_max):
     return gaps
 
 
+def three_pools(game, records):
+    """sfg-v5：回傳 ({lz, gap1, od} 各自升冪, readmit_order)。純函數；records 新→舊。
+
+    readmit_order＝池外號碼依 (g 大→小, 號碼小→大)，池 < MIN_POOL 時由 gen_four_groups 依序回補。
+    """
+    cfg = GAMES[game]
+    gaps = current_gaps(records, cfg["pool_max"])
+    T = OD_THRESHOLD[game]
+    pools = {
+        "lz":   sorted(n for n, g in gaps.items() if g == 0),
+        "gap1": sorted(n for n, g in gaps.items() if g == 1),
+        "od":   sorted(n for n, g in gaps.items() if g >= T),
+    }
+    inpool = set(pools["lz"]) | set(pools["gap1"]) | set(pools["od"])
+    readmit_order = sorted((n for n in gaps if n not in inpool), key=lambda n: (-gaps[n], n))
+    return pools, readmit_order
+
+
 def flatness_exclude(game, records):
     """fpx-v3：回傳 (excluded 升冪, excl_depths 升冪, readmit_order)。純函數。
 
@@ -438,7 +480,8 @@ def flatness_exclude(game, records):
     return excluded, excl_depths, readmit
 
 
-def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=()):
+def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=(),
+                    pools=None):
     """主入口。純函數：同輸入必得同結果。
 
     sfg-v3（2026-08-16）：候選池＝全池 ∖ excluded（fpx-v3 不出牌排除區）。
@@ -449,6 +492,10 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
     """
     cfg = GAMES[game]
     pool_max = cfg["pool_max"]
+    if pools is not None:
+        # sfg-v5：候選池＝三池聯集；池外號碼以 excluded 形式交給既有回補機制，但不對外輸出
+        inpool = set(pools["lz"]) | set(pools["gap1"]) | set(pools["od"])
+        excluded = sorted(set(range(1, pool_max + 1)) - inpool)
     pool = set(range(1, pool_max + 1)) - set(excluded)
 
     pool_relaxed = False
@@ -497,7 +544,12 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=())
     }
     # sfg-v4：排除區已廢除，產線恆為空 ⇒ 不輸出該欄位，頁面的排除區卡自動消失。
     # 回測仍可傳 excluded 進來模擬舊制，此時照常輸出以供比對。
-    if eff_excluded:
+    if pools is not None:
+        out["pools"] = {k: list(v) for k, v in pools.items()}
+        readmitted = sorted(set(excluded) - set(eff_excluded))
+        if readmitted:
+            out["readmit"] = readmitted
+    elif eff_excluded:
         out["excluded"] = sorted(eff_excluded)
     return out
 
@@ -511,9 +563,11 @@ def gen_pending_core(game, records):
     （T3 六個檢定全不顯著）且正在自我失效（長窗 93~97% 期數為空）。
     詳見本檔開頭「v4 變更紀錄」與 BACKTEST_REGISTRY.md。
     """
-    if not records:
+    if not records or len(records) < MIN_HIST:
         return {}
-    return gen_four_groups(game, records[0]["p"], records[0]["n"])
+    pools, readmit_order = three_pools(game, records)
+    return gen_four_groups(game, records[0]["p"], records[0]["n"],
+                           readmit_order=readmit_order, pools=pools)
 
 
 # ──────────────────────────── 驗證與 CLI ────────────────────────────
@@ -532,7 +586,7 @@ def _read_records(game):
     return out
 
 
-def _verify_output(game, last_draw, res):
+def _verify_output(game, last_draw, res, records=None):
     """輸出必須滿足未放寬的所有規則；違者回傳錯誤訊息。"""
     cfg = GAMES[game]
     gs = list(res["strategies"].values())
@@ -562,6 +616,25 @@ def _verify_output(game, last_draw, res):
     hit_excl = set(flat) & set(res.get("excluded", []))
     if hit_excl:
         errs.append(f"選號含排除區號碼 {sorted(hit_excl)}")
+    # sfg-v5：三池檢查（版號一律下限判定）
+    if res.get("v", 0) >= 5:
+        P = res.get("pools")
+        if not P or any(k not in P for k in ("lz", "gap1", "od")):
+            errs.append("v5 缺 pools 欄位")
+        else:
+            a, b, c = set(P["lz"]), set(P["gap1"]), set(P["od"])
+            if a & b or a & c or b & c:
+                errs.append("三池不互斥")
+            allowed = a | b | c | set(res.get("readmit", []))
+            outside = set(flat) - allowed
+            if outside:
+                errs.append(f"選號不在三池內 {sorted(outside)}")
+            if records is not None:
+                exp, _ = three_pools(game, records)
+                if exp != P:
+                    errs.append("三池與 records 重算不一致")
+        if "excluded" in res:
+            errs.append("v5 不得輸出 excluded")
     return errs
 
 
@@ -579,6 +652,7 @@ def selftest():
             ok = False
             continue
         fallback_n = pool_relax_n = lex_n = n = 0
+        psizes = []
         for i in range(len(recs)):
             hist = recs[i:]
             if len(hist) < 40:
@@ -588,7 +662,7 @@ def selftest():
             if res1 != res2:
                 print(f"[{game}] 期 {hist[0]['p']} 確定性失敗！")
                 ok = False
-            errs = _verify_output(game, hist[0]["n"], res1)
+            errs = _verify_output(game, hist[0]["n"], res1, records=hist)
             if errs:
                 print(f"[{game}] 期 {hist[0]['p']} 規則違規: {errs}")
                 ok = False
@@ -597,17 +671,20 @@ def selftest():
             if stale:
                 print(f"[{game}] 期 {hist[0]['p']} 🔴 v4 仍輸出排除區欄位 {stale}")
                 ok = False
-            if res1.get("v") != ALGO_V:
+            if res1.get("v", 0) < ALGO_V:
                 print(f"[{game}] 期 {hist[0]['p']} 版號 {res1.get('v')} != {ALGO_V}")
                 ok = False
             n += 1
+            P = res1.get("pools", {})
+            psizes.append(len(P.get("lz", [])) + len(P.get("gap1", [])) + len(P.get("od", [])))
             if res1["relaxed"]:
                 fallback_n += 1
             if "pool" in res1["relaxed"]:
                 pool_relax_n += 1
             if "lex" in res1["relaxed"]:
                 lex_n += 1
-        print(f"[{game}] {n} 期回放完成｜{ALGO}（無排除區）"
+        ps = f"池 min {min(psizes)}／avg {sum(psizes)/len(psizes):.1f}／max {max(psizes)}" if psizes else "池 —"
+        print(f"[{game}] {n} 期回放完成｜{ALGO}（三池）｜{ps}"
               f"｜fallback {fallback_n}（pool 回補 {pool_relax_n}、lex {lex_n}）")
     print("SELFTEST", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
@@ -620,6 +697,10 @@ def _print_core(game, res):
     print(f"v={res.get('v')}  algo={res.get('algo')}  hi={res['hi']}  "
           f"relaxed={res['relaxed']}")
     # v4 起產線無排除區；僅在有值時才印（回測傳 excluded 進來時仍看得到）
+    if res.get("pools"):
+        P = res["pools"]
+        print(f"POOLS lz={P['lz']} gap1={P['gap1']} od={P['od']}"
+              + (f" readmit={res['readmit']}" if res.get("readmit") else ""))
     if res.get("excluded"):
         print(f"  EXCL: {res['excluded']}  depths={res.get('exclDepths', [])}"
               f"  ({res.get('exclAlgo', '—')})")
@@ -638,7 +719,21 @@ def main(argv):
         recs = _read_records(game)
         res = gen_pending_core(game, recs)
         _print_core(game, res)
-        errs = _verify_output(game, recs[0]["n"], res)
+        errs = _verify_output(game, recs[0]["n"], res, records=recs)
+        print("規則自檢:", "全過 ✅" if not errs else errs)
+        return 0
+
+    # 歷史驗算：pick_engine.py <game> --at <期號> —— 以 BASE_REC 截至該期（含）重算（v5 三池需要歷史）
+    if len(argv) == 4 and argv[1] in GAMES and argv[2] == "--at":
+        game, at = argv[1], int(argv[3])
+        recs = [r for r in _read_records(game) if r["p"] <= at]
+        if not recs or recs[0]["p"] != at:
+            print(f"BASE_REC 找不到第 {at} 期"); return 2
+        res = gen_pending_core(game, recs)
+        if not res:
+            print(f"歷史不足 {MIN_HIST} 期，不產號"); return 2
+        _print_core(game, res)
+        errs = _verify_output(game, recs[0]["n"], res, records=recs)
         print("規則自檢:", "全過 ✅" if not errs else errs)
         return 0
 
@@ -654,12 +749,13 @@ def main(argv):
         _print_core(game, res)
         errs = _verify_output(game, last_draw, res)
         print("規則自檢:", "全過 ✅" if not errs else errs)
-        if not excl:
-            print("（未給 --excluded：此為無排除區的裸算，與正式發布可能不同）")
+        print("（手動模式只有上期號碼、沒有歷史，算不出 v5 三池：此為全池裸算，"
+              "與正式發布不同；要重現正式號碼請用 --at <期號>）")
         return 0
 
     print(__doc__)
     print("用法: pick_engine.py <539|f5|m6>                      # 讀 data 檔完整重算（驗算用）")
+    print("      pick_engine.py <game> --at <期號>                 # 以截至該期的歷史重算（v5）")
     print("      pick_engine.py <game> <上期期號> \"<上期號碼>\" [--excluded \"n,...\"]")
     print("      pick_engine.py --selftest")
     return 2
