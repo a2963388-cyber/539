@@ -274,7 +274,7 @@ function reconstructLastReport() {
       if (rec[i].n.includes(n)) { abBefore = i - 1; break; }
       abBefore = i;
     }
-    return {n, abBefore, ratio: +(abBefore / (st[n]?.ag || 1)).toFixed(2)};
+    return {n, abBefore, ratio: +(abBefore / avgGap(n)).toFixed(2)};
   });
   const zd = {1:0,2:0,3:0,4:0};
   sorted.forEach(n => {zd[Z(n)]++;});
@@ -333,12 +333,11 @@ function savePickLog() {
   lsSet('m6pl', JSON.stringify(pickLog.filter(e=>!basePeriods.has(e.period))));
 }
 // ── CORE ANALYSIS ──────────────────────────────────────────
-const od   = n => st[n] ? +(st[n].ab / st[n].ag).toFixed(2) : 0;
+const od   = n => st[n] ? +(st[n].ab / avgGap(n)).toFixed(2) : 0;
 const sat  = n => st[n] ? +((st[n].ab / st[n].mg)*100).toFixed(1) : 0;
-const excl = n => st[n] ? st[n].ab >= st[n].mg : true;
 
-function candidates() { return Array.from({length:49},(_,i)=>i+1).filter(n=>!excl(n)); }
-function excluded()   { return Array.from({length:49},(_,i)=>i+1).filter(n=>excl(n)); }
+// sfg-v4（2026-08-17）起候選池＝全池，排除規則已退役
+function candidates() { return Array.from({length:49},(_,i)=>i+1); }
 
 function zoneCounts(sliceN=10) {
   const c={1:0,2:0,3:0,4:0};
@@ -445,6 +444,7 @@ function go(t){
 }
 
 function render(){
+  loadHistFull();
   const el=document.getElementById('content');
   if(tab==='report')   renderReport(el);
   else if(tab==='pick') renderPick(el);
@@ -551,7 +551,7 @@ function buildReportForIdx(idx) {
   const sorted = [...r.n].sort((a,b)=>a-b);
   const drawn = sorted.map(n => {
     const abBefore = dormancyBefore(idx, n);
-    const ratio = +(abBefore / (st[n]?.ag || 8)).toFixed(2);
+    const ratio = +(abBefore / avgGap(n)).toFixed(2);
     return {n, abBefore, ratio};
   });
   const zd = {1:0,2:0,3:0,4:0};
@@ -572,8 +572,7 @@ function renderReportHistory(el) {
     r.n.forEach(n=>zd[Z(n)]++);
     const details = r.n.map(n => {
       const d = dormancyBefore(i,n);
-      const ag = st[n]?.ag||8;
-      const ratio = +(d/ag).toFixed(2);
+      const ratio = +(d/avgGap(n)).toFixed(2);
       return {n, d, ratio};
     });
     const superOD = details.filter(x=>x.ratio>=2.0);
@@ -806,11 +805,9 @@ function renderReport(el){
   }
 
   // warnings post-update
-  const w9=[], w78=[], superODs=[];
+  const superODs=[];
   for(let n=1;n<=49;n++){
-    if(!st[n]||R.nums.includes(n)||excl(n)) continue;
-    if(st[n].ab===9) w9.push(n);
-    else if(st[n].ab===7||st[n].ab===8) w78.push(n);
+    if(!st[n]||R.nums.includes(n)) continue;
     if(od(n)>=2.0) superODs.push(n);
   }
   superODs.sort((a,b)=>od(b)-od(a));
@@ -827,7 +824,7 @@ function renderReport(el){
       <tbody>${applySort(R.drawn,'rpt-drawn','n','asc').map(d=>`<tr>
         <td>${ball(d.n,'ball-sm')}</td>
         <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
-        <td>${odTag(d.n)}</td>
+        <td><span class="tag ${d.ratio>=2?'tag-od':d.ratio>=1?'tag-warn':'tag-gray'}">×${d.ratio}倍</span></td>
         <td><span class="tag tag-gray">${ZL[Z(d.n)]}</span></td>
         <td style="font-size:.78rem">${note(d)}</td>
       </tr>`).join('')}</tbody>
@@ -866,11 +863,10 @@ function renderReport(el){
   </div>
 
   <div class="card">
-    <h3>⚠️ 沉寂號追蹤更新</h3>
-    ${w9.length?`<div class="alert alert-danger">🆕 <strong>最高警戒（9期）</strong>：下期再未開即進入排除<br>${w9.map(n=>ball(n,'ball-sm')).join('')}</div>`:''}
-    ${w78.length?`<div class="alert alert-warn">⚠️ <strong>持續觀察（7–8期）</strong>：${w78.map(n=>`${ball(n,'ball-sm')}<small style="font-size:.7rem"> ${st[n].ab}期</small>`).join(' ')}</div>`:''}
-    ${superODs.length?`<div class="alert alert-od">⭐ <strong>超期候選號（逾期 ≥2.0倍）</strong>：<br>${superODs.map(n=>`${ball(n,'ball-sm')}<small style="font-size:.7rem"> ×${od(n)}</small>`).join(' ')}</div>`:''}
-    ${!w9.length&&!w78.length&&!superODs.length?'<div style="font-size:.83rem;color:var(--muted)">本期無特殊警戒號碼</div>':''}
+    <h3>🕰️ 沉寂較久的號碼</h3>
+    ${superODs.length?`<div class="alert alert-od"><strong>目前沉寂 ≥ 2 倍全歷史平均間隔</strong>：<br>${superODs.map(n=>`${ball(n,'ball-sm')}<small style="font-size:.7rem"> ×${od(n)}</small>`).join(' ')}</div>`:''}
+    ${!superODs.length?'<div style="font-size:.83rem;color:var(--muted)">目前沒有沉寂超過 2 倍平均間隔的號碼</div>':''}
+    <div style="font-size:.7rem;color:var(--muted);margin-top:6px">僅描述：每期開獎各自獨立，沉寂久不代表下期比較容易開出。</div>
   </div>
 
   <div class="card">
@@ -901,19 +897,18 @@ function renderReport(el){
 
   <div class="card">
     <h3>🔭 下期觀察重點</h3>
-    <div style="font-size:.86rem;line-height:1.8">${observation(R,w9,superODs)}</div>
+    <div style="font-size:.86rem;line-height:1.8">${observation(R,superODs)}</div>
   </div>`;
 }
 
-function observation(R,w9,sOD){
+function observation(R,sOD){
   const lines=[];
   const zd=R.zoneDist;
   const zero=[1,2,3,4].filter(z=>zd[z]===0);
   if(zero.length) lines.push(`本期 ${zero.map(z=>ZL[z]).join('、')} 開出0碼，斷區走勢是否延續值得觀察。`);
   const maxZ=[1,2,3,4].reduce((a,b)=>zd[a]>zd[b]?a:b);
   if(zd[maxZ]>=3) lines.push(`${ZL[maxZ]} 本期強勢開出 ${zd[maxZ]} 碼，注意是否延續。`);
-  if(w9.length) lines.push(`${w9.map(f2).join('、')} 號已沉寂9期，下期若未開即列排除。`);
-  if(sOD.length) lines.push(`超期候選：${sOD.slice(0,3).map(n=>`${f2(n)}（×${od(n)}倍）`).join('、')} 回歸壓力持續。`);
+  if(sOD.length) lines.push(`沉寂較久：${sOD.slice(0,3).map(n=>`${f2(n)}（×${od(n)}倍）`).join('、')} 目前已超過 2 倍平均間隔（僅描述，每期獨立）。`);
   if(!lines.length) lines.push('本期走勢平穩，無特殊異常，可參考選號分析。');
   return lines.join('<br>');
 }
@@ -1055,8 +1050,6 @@ function buildFixedWheel(){
 }
 
 function renderPick(el){
-  const cand = candidates();
-  const ex = excluded();
   const zc = zoneCounts(10);
   const {hot,cold} = hotCold(zc);
   el.innerHTML=`
@@ -1085,69 +1078,13 @@ function renderPick(el){
     </div>`;
   })()}
   <div class="card">
-    <h3>📋 選號摘要</h3>
-    <div class="sec-lbl">候選號碼池（${cand.length}個）</div>
-    <div style="display:flex;gap:1px;flex-wrap:wrap;margin-bottom:10px">${cand.map(n=>ball(n,'ball-sm')).join('')}</div>
-    ${ex.length?`<div class="sec-lbl" style="margin-top:6px">排除號碼（${ex.length}個）</div>
-    <div style="display:flex;gap:1px;flex-wrap:wrap">${ex.map(n=>ballX(n,'ball-sm')).join('')}</div>`:''}
+    <h3>📋 近 10 期區間冷熱</h3>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <span>熱區：<span class="tag tag-hot">${ZN[hot]} ${zc[hot]}次</span></span>
       <span>冷區：<span class="tag tag-cold">${ZN[cold]} ${zc[cold]}次</span></span>
     </div>
   </div>
-  ${(()=>{
-    const P=pendingPick;
-    if(!P||!(P.exclAlgo||'').startsWith('fpx')){
-      // sfg-v4（2026-08-17）：不出牌排除區已廢除。留一張說明卡，讓看慣這張卡的人
-      // 知道它是「被拿掉了」而不是「壞了」——制度改了要講，這是誠實揭露的一部分。
-      if(P&&P.v>=4) return `<div class="card" style="border-left:4px solid #94a3b8">
-        <h3>🚫 不出牌排除區　已於 ${P.algo} 廢除</h3>
-        <div style="font-size:.75rem;color:var(--muted);line-height:1.75">
-        2026-08-17 起取消，候選池恢復為全池。<strong>理由是它被自己的資料否決了</strong>：
-        全歷史回測（539 5441 期／F5 6301 期／六合 2086 期）顯示排除區裡的號碼，
-        開出機率與隨機挑的號碼<strong>沒有差別</strong>（六個檢定全部不顯著，
-        六合 14.32% vs 理論 14.29%、p=0.96）；而且它正在自我失效——判定門檻是固定值，
-        歷史越長越容易挑到「深度很大但上面根本沒有號碼」的柱子，
-        近期已有 87~97% 的期數排除區是空的。
-        <br>一個沒有效果、又會隨時間無聲改變行為的規則，留著只會讓「可重現」變成假的，
-        所以拿掉。<strong>拿掉不影響中獎機率</strong>——回測中「有排除區」與「無排除區」
-        兩條對照線並無顯著差異。
-        </div></div>`;
-      return (P&&P.excluded&&P.excluded.length)?`<div class="card" style="border-left:4px solid #7c3aed"><h3>🚫 不出牌區（舊制資料）</h3><div style="display:flex;gap:4px;flex-wrap:wrap">${P.excluded.map(n=>ballX(n,'ball-sm')).join('')}</div></div>`:'';
-    }
-    const ex=P.excluded||[], ds=P.exclDepths||[];
-    const TH=(6/49*100).toFixed(1);
-    return `<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>🚫 不出牌排除區（${P.exclAlgo}｜本期 ${ex.length} 顆）</h3>
-      <div style="font-size:.73rem;color:var(--muted);margin-bottom:6px">規則：取平坦度圖上「距基準線最低」的 <strong>2 根</strong>柱子，其上有幾顆號碼就排幾顆（低於理論值 ${TH}% 的柱子才有資格；空柱照樣消耗名次，故本區可能為 0 顆）。本期用到的柱子 g ∈ { ${ds.join('、')} }——與「🏆 中獎追蹤」的平坦度檢驗圖 🚫 標記同步，任何人可對圖重算。</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${ex.length?ex.map(n=>ballX(n,'ball-sm')).join(''):`<span style="font-size:.75rem;color:var(--muted)">本期最低兩根柱子上沒有停留的號碼——排除區為空，四組選號不受此規則限制。</span>`}</div>
-      ${P.relaxed&&P.relaxed.includes('pool')?`<div style="font-size:.7rem;color:#d97706;margin-bottom:4px">⚠️ 本期排除後候選池低於下限，已依註冊規則回補部分號碼（relaxed:pool）；上列為回補後的有效排除區。</div>`:''}
-      <div style="font-size:.7rem;color:var(--muted)">🎯 本期四組選號（${P.algo}）已避開本區。誠實揭露：平坦度檢驗卡自己證明了這些偏離是抽樣噪音——本區是可重現的縮池慣例，不是預測訊號；追蹤頁的 out-of-sample 累積就是它的裁決台，預期長期與隨機基準無異。</div>
-    </div>`;
-  })()}
-  ${(()=>{
-    const fp=fixedPool();
-    const N=fp.pool.length;
-    const pAll=N>=FX_PICK?fxComb(N,FX_PICK)/fxComb(FX_MAX,FX_PICK)*100:0;
-    return `<div class="card" style="border-left:4px solid #7c3aed">
-      <h3>💼 固定投資盤：回歸前段＋逾期組池（三檔模式）</h3>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-        ${FX_MODES.map(m=>`<button onclick="setFxMode('${m.id}')" class="btn ${fp.mode.id===m.id?'':'btn-gray'}" style="font-size:.75rem;padding:5px 12px">${m.name}</button>`).join('')}
-      </div>
-      <div style="font-size:.71rem;color:var(--muted);margin-bottom:7px">${fxNote(fp.mode)}</div>
-      <div style="font-size:.76rem;color:var(--muted);margin-bottom:7px">
-        本檔規則：號碼池 =「沉寂期數命中回歸排名前${fp.mode.k}間隔（本期為 <strong>${fp.topGaps.join('、')} 期</strong>）」的號碼 ＋ 逾期號碼（沉寂 ${fp.mode.lo}–${fp.mode.hi} 期）${fp.mode.excl?'；超期（沉寂 ≥2× 個別平均間隔）一律不進池':'；不另排除超期'}。池子每期隨開獎自動更新，玩法固定、號碼自動輪替。
-      </div>
-      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">🔁 回歸前${fp.mode.k}（${fp.ret.length}碼）：</span>${fp.ret.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
-      <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--muted);white-space:nowrap">⏰ 逾期 ${fp.mode.lo}–${fp.mode.hi} 期（${fp.over.length}碼）：</span>${fp.over.map(n=>ball(n,'ball-sm')).join('')||'<span style="font-size:.72rem;color:var(--muted)">本期無</span>'}</div>
-      <div style="font-size:.74rem;margin:6px 0;padding:6px 9px;background:#f8fafc;border-radius:6px">
-        本期池 <strong>${N}</strong> 碼｜6 個主號全進池機率 <strong>${pAll.toFixed(3)}%</strong>（全進池時保證至少一注中 3 主號；未全進池則無保證，是常態。特別號不計入此保證）
-      </div>
-      <button onclick="buildFixedWheel()" class="btn" style="font-size:.8rem;padding:7px 14px">🎡 產生本期保證投注單（動態演算＋窮舉驗證）</button>
-      <div id="fx-out"></div>
-      <div style="font-size:.7rem;color:var(--muted);margin-top:6px">誠實提醒：六合彩為彩池均分制，期望值約 −46% 且不因選法改變；此盤固定的是「選池規則」，優化的是中獎分佈，不改變期望值。</div>
-    </div>`;
-  })()}`;
+`;
 }
 
 // ── RENDER: ANNUAL ─────────────────────────────────────────
@@ -1205,10 +1142,10 @@ function renderAnnual(el){
   </div>
 
   <div class="card">
-    <h3>🎯 尾數年度偏移（選號核心規律）</h3>
+    <h3>🎯 尾數年度分佈（僅描述性）</h3>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有4個號碼（10,20,30,40），理論期望較低（${+(T*6*4/49).toFixed(1)}次 vs 其他尾數${+(T*6*5/49).toFixed(1)}次）</div>
     <table>
-      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual',(rec[0].dt||'').slice(0,4)+'實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th><th>選號建議</th></tr></thead>
+      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual',(rec[0].dt||'').slice(0,4)+'實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th></tr></thead>
       <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
         const exp=ti===0?+(T*6*4/49).toFixed(1):+(T*6*5/49).toFixed(1);
         const clr=biasClr(bias);
@@ -1219,7 +1156,6 @@ function renderAnnual(el){
           <td style="text-align:center;color:var(--muted)">${exp}</td>
           <td style="text-align:center;font-weight:700;color:${clr}">${bias>0?'+':''}${bias}%</td>
           <td style="font-size:.75rem;color:var(--muted)">${nums.map(f2).join(', ')}</td>
-          <td style="font-size:.75rem">${bias>=15?'🔥強烈推薦':bias>=8?'✅ 推薦':bias<=-15?'🚫 迴避':bias<=-8?'⚠️ 謹慎':'➡️ 中性'}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>
@@ -1260,29 +1196,6 @@ function renderAnnual(el){
         </tr>`;
       }).join('')}</tbody>
     </table>
-  </div>
-
-  <div class="card" style="background:linear-gradient(135deg,#dcfce7,#dbeafe)">
-    <h3>💡 年度選號建議速查</h3>
-    <div style="font-size:.85rem;line-height:2">
-      ${(()=>{
-        const hotN=A.hotNum, hotF=freq[hotN], hotPct=+((hotF/expF-1)*100).toFixed(0);
-        const sortedTails=Object.entries(A.tailBias).sort((a,b)=>+b[1]-+a[1]);
-        const hotTails=sortedTails.filter(([,b])=>+b>=8).map(([t])=>`尾${t}`);
-        const coldTails=sortedTails.filter(([,b])=>+b<=-8).map(([t])=>`尾${t}`);
-        const coldestTail=sortedTails[sortedTails.length-1];
-        const coldNums=Array.from({length:49},(_,i)=>i+1).sort((a,b)=>freq[a]-freq[b]).slice(0,2);
-        const z4diff=+(A.zonePct[4]-(13/49*100)).toFixed(1);
-        return [
-          `✅ <strong>強烈推薦入選：${String(hotN).padStart(2,'0')}</strong>（年度出現${hotF}次，超理論值+${hotPct}%，全年最強統計熱號）`,
-          hotTails.length?`✅ <strong>${hotTails.slice(0,3).join('/')} 偏熱</strong>，選號時可多配置`:'',
-          `✅ <strong>連號要放</strong>：${A.consecRate}%的期數含連號，每組加入一對連號有統計支撐`,
-          z4diff<-1?`⚠️ <strong>四區謹慎</strong>（37-49）偏冷 ${z4diff}%，不宜超過2碼`:'',
-          coldTails.length?`🚫 <strong>迴避${coldTails.slice(0,2).join('、')}</strong>（偏冷 ${coldestTail[1]}%，全年最差表現）`:'',
-          `🚫 <strong>迴避${coldNums.map(n=>String(n).padStart(2,'0')).join('/')}</strong>：年度最冷號碼（各只出現${freq[coldNums[0]]}次）`,
-        ].filter(Boolean).join('<br>');
-      })()}
-    </div>
   </div>`;
 }
 
@@ -1300,13 +1213,25 @@ function loadHistFull() {
     for (const r of h) { const k = key(r); if (k != null) m.set(k, r.n); }
     for (const r of rec) m.set(+r.p, r.n);
     const ps = [...m.keys()].sort((a, b) => a - b);
-    const last = new Array(49+1).fill(-1), sum = new Array(49+1).fill(0), cnt = new Array(49+1).fill(0);
-    ps.forEach((k, i) => { for (const n of m.get(k)) { if (last[n] >= 0) { sum[n] += i - last[n] - 1; cnt[n]++; } last[n] = i; } });
-    const res = { draws: ps.length, from: ps[0], to: ps[ps.length-1], avg: {}, cur: {} };
-    for (let n = 1; n <= 49; n++) { res.avg[n] = cnt[n] ? sum[n] / cnt[n] : null; res.cur[n] = last[n] >= 0 ? ps.length - 1 - last[n] : null; }
+    const last = new Array(49+1).fill(-1), sum = new Array(49+1).fill(0), cnt = new Array(49+1).fill(0), mx = new Array(49+1).fill(0);
+    ps.forEach((k, i) => { for (const n of m.get(k)) { if (last[n] >= 0) { const g = i - last[n] - 1; sum[n] += g; cnt[n]++; if (g > mx[n]) mx[n] = g; } last[n] = i; } });
+    const res = { draws: ps.length, from: ps[0], to: ps[ps.length-1], avg: {}, cur: {}, max: {} };
+    for (let n = 1; n <= 49; n++) { res.avg[n] = cnt[n] ? sum[n] / cnt[n] : null; res.cur[n] = last[n] >= 0 ? ps.length - 1 - last[n] : null; res.max[n] = cnt[n] ? mx[n] : null; }
     _histFull = res;
-    if (tab === 'stats') render();
-  }).catch(() => { _histFull = { err: true }; if (tab === 'stats') render(); });
+    if (['stats','report','settings'].includes(tab)) render();
+  }).catch(() => { _histFull = { err: true }; if (['stats','report','settings'].includes(tab)) render(); });
+}
+
+// 平均間隔／最大間隔（2026-11-27 起取代 BASE_ST 的 ag/mg——那兩個欄位 7 月初後就沒再更新）
+// 全歷史載入前先用網頁紀錄 rec 的回歸間隔頂著；定義一律＝兩次開出之間沒開的期數
+function _recGaps(n) { const h = retHist[n]; return h && h.length ? h.map(x => x.gap) : []; }
+function avgGap(n) {
+  if (_histFull && !_histFull.err && _histFull.avg[n] != null) return _histFull.avg[n];
+  const g = _recGaps(n); return g.length ? g.reduce((a, b) => a + b, 0) / g.length : 7.17;
+}
+function maxGap(n) {
+  if (_histFull && !_histFull.err && _histFull.max[n] != null) return _histFull.max[n];
+  const g = _recGaps(n); return g.length ? Math.max(...g) : null;
 }
 
 function renderStats(el){
@@ -1331,7 +1256,6 @@ function renderStats(el){
   const tailBias50 = t => +((tail50[t]/exp50(t)-1)*100).toFixed(1);
   const tailsSorted50 = Array.from({length:10},(_,i)=>i).sort((a,b)=>tailBias50(b)-tailBias50(a));
 
-  const topOD=candidates().sort((a,b)=>od(b)-od(a)).slice(0,10);
 
   // Return history stats
   function retStats(n) {
@@ -1362,8 +1286,8 @@ function renderStats(el){
   </div>
 
   <div class="card">
-    <h3>📉 長期尾數偏移分析（選號核心規律）</h3>
-    <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">依50期偏移排序。此規律在50期、100期均高度穩定，為尾數優先流的理論依據。</p>
+    <h3>📉 長期尾數分佈（僅描述性）</h3>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">依 50 期偏移排序，只描述各尾數實際開出與理論值的差距。全歷史回測已證實尾數偏移沒有預測價值，請勿當選號依據。</p>
     <table>
       <thead><tr>${thSort('st-tail','t','尾數')}${thSort('st-tail','act50','50期實際')}<th>50期理論</th>${thSort('st-tail','b50','偏移')}${thSort('st-tail','b100','100期偏移')}<th>號碼</th></tr></thead>
       <tbody>${applySort(Array.from({length:10},(_,i)=>({t:i,act50:tail50[i],b50:tailBias50(i),b100:+((tail100[i]/exp100(i)-1)*100).toFixed(1)})),'st-tail','b50','desc').map(({t,act50,b50,b100})=>{
@@ -1408,7 +1332,7 @@ function renderStats(el){
       ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
       : `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ret-tbl">
       <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','havg','全歷史平均間隔')}${thSort('st-ret','od','逾期倍數')}<th>上次沉寂</th></tr></thead>
-      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);const HF=_histFull&&!_histFull.err?_histFull:null;const havg=HF&&HF.avg[n]!=null?+HF.avg[n].toFixed(1):null;const cur=HF?HF.cur[n]:null;const od=havg&&cur!=null?+(cur/havg).toFixed(2):null;return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,havg,cur,od,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','od','desc').map(({n,count,avg,min,max,last,diff,havg,cur,od}) => {
+      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);const HF=_histFull&&!_histFull.err?_histFull:null;const havg=HF&&HF.avg[n]!=null?+HF.avg[n].toFixed(1):null;const cur=HF?HF.cur[n]:null;const od=havg&&cur!=null?+(cur/havg).toFixed(2):null;return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,havg,cur,od,diff:havg!=null?(+s.avg-havg).toFixed(1):null};}), 'st-ret','od','desc').map(({n,count,avg,min,max,last,diff,havg,cur,od}) => {
         const odColor = od===null?'var(--muted)':od>=2?'#dc2626':od>=1.5?'#d97706':od>=1?'var(--text)':'var(--muted)';
         const hfCell = _histFull===null?'<span style="color:var(--muted);font-size:.75rem">載入中…</span>':(_histFull.err?'<span style="color:var(--muted);font-size:.75rem">讀取失敗</span>':null);
         const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
@@ -1424,7 +1348,7 @@ function renderStats(el){
         </tr>`;
       }).join('')}</tbody>
     </table></div>
-    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">括號內為與歷史平均間隔的差值，紅色=比平均更晚回歸，綠色=比平均更早<br>📚 全歷史平均間隔：${_histFull&&!_histFull.err?`第 ${_histFull.from}～${_histFull.to} 期，共 ${_histFull.draws.toLocaleString()} 期`:'完整歷史紀錄'}（只計主 6 碼、不含特別號，與本表回歸統計同口徑）；逾期倍數＝目前沉寂 ÷ 全歷史平均間隔（≥2 紅、≥1.5 橘）<br>⚠️ 僅描述性：每期開獎各自獨立，逾期倍數高<b>不代表</b>下期比較容易開出（全歷史回測已驗證），請勿當選號依據</div>`
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">括號內＝近期平均沉寂 − 全歷史平均間隔，紅色＝近期比長期晚回歸，綠色＝比長期早<br>📚 全歷史平均間隔：${_histFull&&!_histFull.err?`第 ${_histFull.from}～${_histFull.to} 期，共 ${_histFull.draws.toLocaleString()} 期`:'完整歷史紀錄'}（只計主 6 碼、不含特別號，與本表回歸統計同口徑）；逾期倍數＝目前沉寂 ÷ 全歷史平均間隔（≥2 紅、≥1.5 橘）<br>⚠️ 僅描述性：每期開獎各自獨立，逾期倍數高<b>不代表</b>下期比較容易開出（全歷史回測已驗證），請勿當選號依據</div>`
     }
   </div>
 
@@ -1463,27 +1387,7 @@ function renderStats(el){
     })()}
   </div>
 
-  <div class="card">
-    <h3>⭐ 複合壓力排行 TOP 10</h3>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px">複合評分 = 逾期倍數×0.6 + 歷史飽和度×0.4，正確反映實際回歸壓力（避免大間隔號碼虛高）</div>
-    ${candidates().sort((a,b)=>cs(b)-cs(a)).slice(0,10).map((n,i)=>{
-      const r=od(n), s=sat(n), c=cs(n);
-      const clr=r>=2?'var(--od)':r>=1?'var(--warn)':'var(--muted)';
-      return `<div class="num-row">
-        <span style="color:var(--muted);width:18px;font-size:.78rem">${i+1}</span>
-        ${ball(n,'ball-sm')}
-        <div class="od-bar">
-          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
-            <span style="font-size:.82rem;font-weight:600">${f2(n)} 號</span>
-            ${r>=2?'<span class="tag tag-od">超期</span>':r>=1?'<span class="tag tag-warn">逾期</span>':''}
-            <span style="font-size:.7rem;color:#9333ea">飽和${s}%</span>
-          </div>
-          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(s,100)}%;background:${clr}"></div></div>
-        </div>
-        <div class="od-label" style="color:${clr}">od×${r}<br><span style="color:#9333ea;font-weight:600;font-size:.75rem">綜${c.toFixed(2)}</span></div>
-      </div>`;
-    }).join('')}
-  </div>`;
+`;
 }
 
 // ── RENDER: RECORDS ────────────────────────────────────────
@@ -1624,38 +1528,6 @@ function renderTrack(el) {
           </tr>`;}).join('')}</tbody>
       </table></div>
       <div style="font-size:.7rem;color:var(--muted);margin-top:6px">隨機期望 ${E2} 碼/組/期（3×${PICK}/${POOL}）｜超額＝平均−期望｜誠實揭露：長期而言超額應收斂於 0——本表存在的目的正是驗證這件事</div>`}
-    ${(()=>{
-      const rows=pickLog.filter(l=>l.excludedHits!=null&&l.excluded);
-      if(!rows.length) return '';
-      const seg=(rs,label)=>{
-        if(!rs.length) return '';
-        const n=rs.length;
-        const expOf=l=>PICK*l.excluded.length/POOL;
-        const avg=+(rs.reduce((a,l)=>a+l.excludedHits,0)/n).toFixed(2);
-        const expAvg=+(rs.reduce((a,l)=>a+expOf(l),0)/n).toFixed(2);
-        const eff=+(expAvg-avg).toFixed(2);
-        const effClr=eff>0.1?'#16a34a':eff>-0.1?'#d97706':'#dc2626';
-        const stat=n>=3?statsFromVals(rs.map(l=>l.excludedHits-expOf(l)),0):null;
-        return `<div style="margin-top:6px"><strong>${label}</strong>（${n} 期）
-          <div style="margin-top:3px;display:flex;gap:14px;flex-wrap:wrap">
-            <span>平均落入 <strong style="color:${effClr}">${avg}</strong> 碼</span>
-            <span>逐筆期望均值 ${expAvg}</span>
-            <span>排除成效 <strong style="color:${effClr}">${eff>=0?'+':''}${eff}</strong>（${eff>0.05?'✅ 少於':eff<-0.05?'❌ 多於':'⚠️ 貼平'}隨機）</span>
-            <span>p：<strong>${stat?`p=${stat.pval}`:'—'}</strong></span>
-            <span style="font-size:.72rem">95%CI ${stat?`[${stat.ci[0]}, ${stat.ci[1]}]`:'—'}</span>
-          </div></div>`;
-      };
-      const fpx3=rows.filter(l=>(l.exclAlgo||'')==='fpx-v3');
-      const fpx12=rows.filter(l=>/^fpx-v[12]$/.test(l.exclAlgo||''));
-      const legacy=rows.filter(l=>!(l.exclAlgo||'').startsWith('fpx'));
-      return `<div style="margin-top:10px;padding:10px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;font-size:.75rem">
-        🎯 <strong>不出牌 out-of-sample</strong>
-        <span style="font-size:.7rem;color:var(--muted)">｜開獎落入排除區的碼數；各版顆數皆逐期浮動，期望逐筆計算（顆數×開出數/池）</span>
-        ${seg(fpx3,'fpx-v3（現行，2026-08-16 事前註冊：最低 2 根柱子，顆數不定）')}
-        ${seg(fpx12,'fpx-v1／v2（已退役：最低柱湊滿 5 顆，2026-08-12～08-16）')}
-        ${seg(legacy,'舊制：區間輪動＋馬可夫固定 15 碼（已退役凍結）')}
-      </div>`;
-    })()}
   </div>
 
   <div class="card">
@@ -1711,8 +1583,7 @@ function renderTrack(el) {
       }
       if(rows.length<4) return '<div style="color:var(--muted);font-size:.82rem">資料不足</div>';
       const outliers=rows.filter(r=>r.h<r.lo||r.h>r.hi).length;
-      const exD=new Set((pendingPick&&pendingPick.exclDepths)||[]);
-      const maxH=Math.max(...rows.map(r=>r.h),expP)*1.25;
+          const maxH=Math.max(...rows.map(r=>r.h),expP)*1.25;
       const barH=v=>Math.max(2,v/maxH*90);
       return `<div style="position:relative;height:112px">
         <div style="position:absolute;left:0;right:0;bottom:${barH(expP)}px;border-top:2px dashed #dc2626;z-index:2"><span style="position:absolute;right:2px;top:-15px;font-size:.62rem;color:#dc2626;font-weight:700">理論 ${expP.toFixed(1)}%</span></div>
@@ -1720,14 +1591,14 @@ function renderTrack(el) {
         ${rows.map(r=>{
           const out=r.h<r.lo||r.h>r.hi;
           return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
-            ${exD.has(r.g)?'<span style="font-size:.6rem" title="本期不出牌排除深度">🚫</span>':''}<span style="font-size:.56rem;color:${out?'#dc2626':'var(--muted)'}">${r.h.toFixed(0)}</span>
+            <span style="font-size:.56rem;color:${out?'#dc2626':'var(--muted)'}">${r.h.toFixed(0)}</span>
             <div style="width:72%;background:${out?'#dc2626':'#7c3aed'};opacity:.8;height:${barH(r.h)}px;border-radius:3px 3px 0 0"></div>
           </div>`;
         }).join('')}
         </div>
       </div>
       <div style="display:flex;gap:3px;margin-top:2px">${rows.map(r=>`<div style="flex:1;text-align:center;font-size:.58rem;color:var(--muted)">${r.g}</div>`).join('')}</div>
-      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%｜🚫＝本期不出牌用到的柱子 fpx-v3）</div>
+      <div style="text-align:center;font-size:.62rem;color:var(--muted);margin-bottom:6px">← 沉寂深度 g（期）→（每根柱下方為 g，柱高＝該深度下一期回歸機率%）</div>
       <div style="font-size:.74rem;padding:7px 10px;background:${outliers<=1?'#f0fdf4':'#fef9c3'};border-radius:6px">
         ${outliers<=1
           ?`✅ <strong>各沉寂深度的回歸機率均貼近理論值</strong>（${rows.length} 個深度僅 ${outliers} 個超出 ±2σ，屬正常波動）——「沉寂越久越該回歸」在本資料中<strong>不成立</strong>，這是每期獨立開獎的直接證據。號碼不會「記得」自己沉寂多久。`
@@ -1741,43 +1612,35 @@ function renderTrack(el) {
     ${logHTML}
   </div>
 
-  ${oldRows.length?`<div class="card" style="opacity:.85">
-    <h3>🗄️ 舊制 10 策略歷史（已凍結，2026-08-09 退役）</h3>
-    <div style="font-size:.74rem;color:var(--muted);margin-bottom:8px">2026-08-09 減法重構：10 策略 × 8 碼制退役，歷史紀錄凍結保留供審計。以下為最終彙總（不再更新）。</div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>策略</th><th>N</th><th>平均命中/期</th></tr></thead>
-      <tbody>${oldRows.map(r=>`<tr><td style="font-size:.78rem">${gLabel(r.k)}</td><td style="text-align:center">${r.n}</td><td style="text-align:center;font-weight:700">${r.avg}</td></tr>`).join('')}</tbody>
-    </table></div>
-  </div>`:''}`;
+`;
 }
 
 // ── RENDER: SETTINGS ───────────────────────────────────────
 function renderSettings(el){
   el.innerHTML=`
   <div class="card">
-    <h3>⚙️ 更新號碼統計表</h3>
-    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">每隔約50期手動更新各號碼的長期統計資料（最大間隔、平均間隔等）。<br>格式：每行「號碼 最大間隔 平均間隔 最多連續 最近未出現期數 出現總數 20期 50期 100期」</p>
-    <textarea id="st-paste" placeholder="1 44 7.476 4 3 787 1 7 11&#10;2 46 7.766 4 8 757 5 12 19&#10;…"></textarea>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button class="btn" onclick="applyStats()">套用更新</button>
+    <h3>⚙️ 資料維護</h3>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">開獎資料由系統每天自動更新，平均間隔、最大間隔改用完整歷史紀錄即時計算，不需要再手動貼統計表。</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-red" onclick="resetAll()">重設所有資料</button>
     </div>
   </div>
 
   <div class="card">
     <h3>📊 目前各號碼狀態</h3>
-    <table>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ret-tbl">
       <thead><tr>${thSort('cfg-st','n','號碼')}${thSort('cfg-st','ab','沉寂期')}${thSort('cfg-st','ag','全歷史平均間隔')}${thSort('cfg-st','mg','全歷史最大間隔')}${thSort('cfg-st','ratio','逾期倍數')}</tr></thead>
-      <tbody>${applySort(Array.from({length:49},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:st[n].ag,mg:st[n].mg,ratio:od(n),ex:excl(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio,ex})=>{
-        return `<tr style="${ex?'background:#fee2e2':''}">
-          <td>${ex?ballX(n,'ball-sm'):ball(n,'ball-sm')}</td>
-          <td>${ab}</td><td>${ag}</td><td>${mg}</td>
-          <td style="color:${ex?'#dc2626':ratio>=2?'var(--od)':ratio>=1?'var(--warn)':'var(--muted)'};font-weight:${ratio>=1||ex?'700':'400'}">
-            ${ex?'🚫排除':'×'+ratio}
+      <tbody>${applySort(Array.from({length:49},(_,i)=>i+1).map(n=>({n,ab:st[n].ab,ag:+avgGap(n).toFixed(1),mg:maxGap(n),ratio:od(n)})),'cfg-st','ab','desc').map(({n,ab,ag,mg,ratio})=>{
+        return `<tr>
+          <td>${ball(n,'ball-sm')}</td>
+          <td>${ab}</td><td>${ag}</td><td>${mg??'—'}</td>
+          <td style="color:${ratio>=2?'var(--od)':ratio>=1?'var(--warn)':'var(--muted)'};font-weight:${ratio>=1?'700':'400'}">
+            ×${ratio}
           </td>
         </tr>`;
       }).join('')}</tbody>
-    </table>
+    </table></div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">${_histFull&&!_histFull.err?`平均／最大間隔取自完整歷史 ${_histFull.draws.toLocaleString()} 期`:'完整歷史載入中，暫以網頁紀錄計算'}；逾期倍數＝沉寂期 ÷ 平均間隔，僅描述性</div>
   </div>`;
 }
 
