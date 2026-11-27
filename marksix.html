@@ -848,20 +848,17 @@ function renderReport(el){
   <div class="card">
     <h3>🔁 本期回歸號碼 — 近期沉寂統計（網頁紀錄 ${rec.length} 期）</h3>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ret-tbl">
-      <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','cnt','回歸次數')}${thSort('rpt-ret','avg','近期平均沉寂')}${thSort('rpt-ret','min','最短')}${thSort('rpt-ret','max','最長')}</tr></thead>
+      <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','avg','近期平均沉寂')}</tr></thead>
       <tbody>${applySort(R.drawn.map(d=>{
         const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
         const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
         return {n:d.n,abBefore:d.abBefore,cnt,avg:avg?+avg.toFixed(1):null,min:cnt?Math.min(...allGaps):null,max:cnt?Math.max(...allGaps):null};
       }),'rpt-ret','n','asc').map(({n,abBefore,cnt,avg,min,max})=>{
-        if(!cnt) return `<tr><td>${ball(n,'ball-sm')}</td><td>${abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
+        if(!cnt) return `<tr><td>${ball(n,'ball-sm')}</td><td>${abBefore}期</td><td style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
         return `<tr>
           <td>${ball(n,'ball-sm')}</td>
           <td style="font-weight:600">${abBefore}期</td>
-          <td style="text-align:center">${cnt}次</td>
           <td style="text-align:center">${avg}期</td>
-          <td style="text-align:center">${min}期</td>
-          <td style="text-align:center">${max}期</td>
         </tr>`;
       }).join('')}
       </tbody>
