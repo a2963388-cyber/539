@@ -1260,7 +1260,30 @@ function renderAnnual(el){
 }
 
 // ── RENDER: STATS ──────────────────────────────────────────
+// 全歷史平均間隔＋逾期倍數（2026-11-27 鈞洋要求）
+// 口徑：歷史檔 history_f5.json ＋ 目前 rec 合併去重、依期號排序；間隔＝兩次開出之間沒開的期數（同回歸統計的沉寂定義）
+// 僅描述性：每期獨立開獎，逾期倍數高不代表下期較易開出（2026-08-16 全歷史回測已驗證），不可當選號依據
+let _histFull = null, _histFullLoading = false;
+function loadHistFull() {
+  if (_histFull || _histFullLoading) return;
+  _histFullLoading = true;
+  fetch('history_f5.json?v=' + Date.now()).then(r => r.json()).then(h => {
+    const key = r => r.p != null ? +r.p : (r.draw ? +String(r.draw).replace('/', '') : null);
+    const m = new Map();
+    for (const r of h) { const k = key(r); if (k != null) m.set(k, r.n); }
+    for (const r of rec) m.set(+r.p, r.n);
+    const ps = [...m.keys()].sort((a, b) => a - b);
+    const last = new Array(39+1).fill(-1), sum = new Array(39+1).fill(0), cnt = new Array(39+1).fill(0);
+    ps.forEach((k, i) => { for (const n of m.get(k)) { if (last[n] >= 0) { sum[n] += i - last[n] - 1; cnt[n]++; } last[n] = i; } });
+    const res = { draws: ps.length, from: ps[0], to: ps[ps.length-1], avg: {}, cur: {} };
+    for (let n = 1; n <= 39; n++) { res.avg[n] = cnt[n] ? sum[n] / cnt[n] : null; res.cur[n] = last[n] >= 0 ? ps.length - 1 - last[n] : null; }
+    _histFull = res;
+    if (tab === 'stats') render();
+  }).catch(() => { _histFull = { err: true }; if (tab === 'stats') render(); });
+}
+
 function renderStats(el){
+  loadHistFull();
   const zc10=zoneCounts(10);
   const zc5r=zoneCounts(5);
   const zc5p={1:0,2:0,3:0,4:0};
@@ -1357,8 +1380,10 @@ function renderStats(el){
     ${numsWithHist.length === 0
       ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
       : `<table>
-      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
-      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','count','desc').map(({n,count,avg,min,max,last,diff}) => {
+      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','havg','全歷史平均間隔')}${thSort('st-ret','od','逾期倍數')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
+      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);const HF=_histFull&&!_histFull.err?_histFull:null;const havg=HF&&HF.avg[n]!=null?+HF.avg[n].toFixed(1):null;const cur=HF?HF.cur[n]:null;const od=havg&&cur!=null?+(cur/havg).toFixed(2):null;return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,havg,cur,od,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','count','desc').map(({n,count,avg,min,max,last,diff,havg,cur,od}) => {
+        const odColor = od===null?'var(--muted)':od>=2?'#dc2626':od>=1.5?'#d97706':od>=1?'var(--text)':'var(--muted)';
+        const hfCell = _histFull===null?'<span style="color:var(--muted);font-size:.75rem">載入中…</span>':(_histFull.err?'<span style="color:var(--muted);font-size:.75rem">讀取失敗</span>':null);
         const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
         return `<tr>
           <td>${ball(n,'ball-sm')}</td>
@@ -1367,13 +1392,15 @@ function renderStats(el){
             <strong>${avg}</strong>期
             ${diff !== null ? `<span style="font-size:.72rem;${diffColor}">(${parseFloat(diff)>0?'+':''}${diff})</span>` : ''}
           </td>
+          <td style="text-align:center">${hfCell ?? (havg===null?'—':`<strong>${havg}</strong>期`)}</td>
+          <td style="text-align:center;font-weight:700;color:${odColor}">${hfCell ?? (od===null?'—':`${od}×<div style="font-size:.7rem;font-weight:400;color:var(--muted)">目前 ${cur} 期</div>`)}</td>
           <td style="text-align:center">${min}期</td>
           <td style="text-align:center">${max}期</td>
           <td style="text-align:center;font-size:.78rem;color:var(--muted)">${last.gap}期<br>第${last.period}期</td>
         </tr>`;
       }).join('')}</tbody>
     </table>
-    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">括號內為與歷史平均間隔的差值，紅色=比平均更晚回歸，綠色=比平均更早</div>`
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">括號內為與歷史平均間隔的差值，紅色=比平均更晚回歸，綠色=比平均更早<br>📚 全歷史平均間隔：${_histFull&&!_histFull.err?`第 ${_histFull.from}～${_histFull.to} 期，共 ${_histFull.draws.toLocaleString()} 期`:'完整歷史紀錄'}；逾期倍數＝目前沉寂 ÷ 全歷史平均間隔（≥2 紅、≥1.5 橘）<br>⚠️ 僅描述性：每期開獎各自獨立，逾期倍數高<b>不代表</b>下期比較容易開出（全歷史回測已驗證），請勿當選號依據</div>`
     }
   </div>
 
