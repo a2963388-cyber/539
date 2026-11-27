@@ -185,6 +185,24 @@ const f2 = n => String(n).padStart(2,'0');
 
 // ── STORAGE ────────────────────────────────────────────────
 let rec = [], st = {}, retHist = {}, conStat = {}, ANNUAL = null;
+
+// 期號→開獎日期（2026-11-27 鈞洋要求「每期都要有日期，不要只有期號」）
+// 從 BASE_REC 查：瀏覽器 localStorage 存的舊 rec 沒有 dt 也查得到；手動輸入、查不到的期數回空字串
+let _dtMap = null;
+function dtOf(p) {
+  if (!_dtMap) {
+    _dtMap = {};
+    (typeof BASE_REC !== 'undefined' ? BASE_REC : []).forEach(r => { if (r.dt) _dtMap[r.p] = r.dt; });
+  }
+  if (!_dtMap[p]) { const r = (rec || []).find(x => x.p == p && x.dt); if (r) _dtMap[p] = r.dt; }
+  return _dtMap[p] || '';
+}
+// full=true → 2026/11/26（四）；否則 11/26（四）
+function dtTag(p, full) {
+  const d = dtOf(p); if (!d) return '';
+  const wd = '日一二三四五六'[new Date(d + 'T00:00:00').getDay()];
+  return (full ? d.replace(/-/g, '/') : d.slice(5).replace('-', '/')) + '（' + wd + '）';
+}
 let pendingPick = null;  // {strategies:{G1:[...], ...}, ts: timestamp}
 let pickLog = [];        // [{period, strategies, result, hits, ts}]
 let compNum = 8;         // 同伴分析選中的號碼
@@ -639,7 +657,7 @@ function renderReportHistory(el) {
             }).join('');
             const flags = (p.superOD.length?'💥':'')+(p.overdue.length&&!p.superOD.length?'⚠️':'');
             return `<tr onclick="toggleRptDetail('${did}')" style="cursor:pointer;border-top:1px solid var(--border)">
-              <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${p.p}</td>
+              <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${p.p}${dtTag(p.p)?`<div style="font-size:.7rem;color:var(--muted);font-weight:400;white-space:nowrap">${dtTag(p.p)}</div>`:''}</td>
               ${zRow}
               <td style="padding:6px 8px">${p.nums.map(n=>{
                 const det=p.details.find(x=>x.n===n);
@@ -683,7 +701,7 @@ function renderHistReport(el) {
     <button onclick="rptMode=1;render()" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:600;cursor:pointer">← 返回列表</button>
     <div style="display:flex;align-items:center;gap:8px">
       ${idx<rec.length-1?`<button onclick="showRptDetail(${idx+1})" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer">← 上一期</button>`:`<button disabled style="border:none;background:#f1f5f9;color:#94a3b8;border-radius:8px;padding:7px 12px;font-size:.82rem">← 上一期</button>`}
-      <span style="font-size:.84rem;font-weight:700;color:var(--primary)">第 ${R.period} 期</span>
+      <span style="font-size:.84rem;font-weight:700;color:var(--primary);text-align:center">第 ${R.period} 期${dtTag(R.period)?`<div style="font-size:.7rem;color:var(--muted);font-weight:400;white-space:nowrap">${dtTag(R.period,true)}</div>`:''}</span>
       ${idx>0?`<button onclick="showRptDetail(${idx-1})" style="border:none;background:#e2e8f0;border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer">下一期 →</button>`:`<button disabled style="border:none;background:#f1f5f9;color:#94a3b8;border-radius:8px;padding:7px 12px;font-size:.82rem">下一期 →</button>`}
     </div>
   </div>`;
@@ -703,7 +721,7 @@ function renderHistReport(el) {
   const gKeys = logEntry ? Object.keys(logEntry.strategies || {}) : [];
   el.innerHTML = modeBar + navBar + `
   <div class="card">
-    <h3>📋 第 ${R.period} 期 快報</h3>
+    <h3>📋 第 ${R.period} 期 快報 <span style="font-size:.78rem;color:var(--muted);font-weight:500">${dtTag(R.period,true)}</span></h3>
     <div class="sec-lbl">本期開出號碼</div>
     <div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px">${R.nums.map(n=>ball(n)).join('')}</div>
     <table>
@@ -831,7 +849,7 @@ function renderReport(el){
 
   el.innerHTML=modeBar+`
   <div class="card">
-    <h3>📋 第 ${R.period} 期 快報</h3>
+    <h3>📋 第 ${R.period} 期 快報 <span style="font-size:.78rem;color:var(--muted);font-weight:500">${dtTag(R.period,true)}</span></h3>
     <div class="sec-lbl">本期開出號碼</div>
     <div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px">${R.nums.map(n=>ball(n)).join('')}</div>
     <table>
@@ -859,7 +877,7 @@ function renderReport(el){
 
   <div class="card">
     <h3>🔁 本期回歸號碼 — 近期沉寂統計（網頁紀錄 ${rec.length} 期）</h3>
-    <table>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ret-tbl">
       <thead><tr>${thSort('rpt-ret','n','號碼')}${thSort('rpt-ret','abBefore','本次沉寂')}${thSort('rpt-ret','cnt','回歸次數')}${thSort('rpt-ret','avg','近期平均沉寂')}${thSort('rpt-ret','min','最短')}${thSort('rpt-ret','max','最長')}</tr></thead>
       <tbody>${applySort(R.drawn.map(d=>{
         const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
@@ -877,7 +895,7 @@ function renderReport(el){
         </tr>`;
       }).join('')}
       </tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="card">
@@ -1077,7 +1095,7 @@ function renderPick(el){
   el.innerHTML=`
   ${lastReport ? `<div style="background:linear-gradient(135deg,#1a3a1a,#0d2b0d);border:1px solid #2d6a2d;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
     <div>
-      <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期已登錄</span>
+      <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期${dtTag(lastReport.period)?'（'+dtTag(lastReport.period)+'）':''}已登錄</span>
       <span style="color:var(--muted);font-size:.8rem;margin-left:8px">開出：${lastReport.nums.map(n=>`<b style="color:#e2e8f0">${String(n).padStart(2,'0')}</b>`).join(' ')}</span>
     </div>
     <button onclick="go('report')" style="background:#2d6a2d;border:none;color:#4ade80;font-size:.78rem;padding:4px 10px;border-radius:6px;cursor:pointer">📋 查看快報</button>
@@ -1456,7 +1474,7 @@ function renderStats(el){
           <td style="text-align:center;font-weight:700;color:${odColor}">${hfCell ?? (od===null?'—':`${od}×<div style="font-size:.7rem;font-weight:400;color:var(--muted)">目前 ${cur} 期</div>`)}</td>
           <td style="text-align:center">${min}期</td>
           <td style="text-align:center">${max}期</td>
-          <td style="text-align:center;font-size:.78rem;color:var(--muted)">${last.gap}期<br>第${last.period}期</td>
+          <td style="text-align:center;font-size:.78rem;color:var(--muted)">${last.gap}期<br>第${last.period}期${dtTag(last.period)?'<br>'+dtTag(last.period):''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>
@@ -1534,7 +1552,7 @@ function renderRecords(el){
         const zd={1:0,2:0,3:0,4:0};
         n.forEach(num=>{zd[Z(num)]++;});
         return `<tr>
-          <td style="font-size:.8rem;color:var(--muted);font-weight:600">${p}</td>
+          <td style="font-size:.8rem;color:var(--muted);font-weight:600;white-space:nowrap">${p}${dtTag(p)?`<div style="font-size:.7rem;color:var(--muted);font-weight:400;white-space:nowrap">${dtTag(p)}</div>`:''}</td>
           <td>${n.map(num=>ball(num,'ball-sm')).join('')}</td>
           <td style="font-size:.78rem;color:var(--muted)">${[1,2,3,4].map(z=>zd[z]).join('-')}</td>
           <td><button onclick="delRec(${_i})" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:.85rem;padding:4px">✕</button></td>
@@ -1618,7 +1636,7 @@ function renderTrack(el) {
       const bestG=l.hits?(Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0]:'';
       return `<div style="border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
+          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${dtTag(l.period)?'（'+dtTag(l.period)+'）':''}${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
           <span style="font-size:.75rem">開出 ${(l.result||[]).map(f2).join(' ')}</span>
           <span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">最佳 ${bestG?gLabel(bestG):'—'} ${maxH}碼</span>
         </div>
@@ -2006,7 +2024,7 @@ document.querySelectorAll('.ni').forEach((inp,i,all)=>{
 function updateHdr(){
   const r=rec[0];
   document.getElementById('hdr-info').innerHTML=r
-    ?`最新：第 ${r.p} 期<br>${r.n.map(f2).join(' ')}`
+    ?`最新：第 ${r.p} 期${dtTag(r.p)?'（'+dtTag(r.p,true)+'）':''}<br>${r.n.map(f2).join(' ')}`
     :'尚無紀錄';
 }
 

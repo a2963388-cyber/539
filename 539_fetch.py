@@ -111,7 +111,7 @@ def fetch_draws_api(from_period: int) -> list:
             if len(nums) != 5 or not all(1 <= n <= 39 for n in nums):
                 print(f"⚠️ 期號 {p} 號碼異常，跳過：{nums}")
                 continue
-            draws.append({"p": p, "n": nums})
+            draws.append({"p": p, "dt": (it.get("lotteryDate") or "")[:10], "n": nums})
         if covered:
             break
         d = (d - timedelta(days=1)).replace(day=1)
@@ -151,7 +151,7 @@ def fetch_draws_pilio(from_period: int) -> list:
             continue
         nums = [int(x) for x in re.findall(r"\d{1,2}", nums_raw) if 1 <= int(x) <= 39]
         if len(nums) == 5:
-            draws.append({"p": period, "n": sorted(nums)})
+            draws.append({"p": period, "dt": d.isoformat(), "n": sorted(nums)})
 
     if draws:
         print(f"✅ pilio 備援找到 {len(draws)} 筆新資料（期號由日期推算，請留意停開日）")
@@ -421,7 +421,9 @@ def update_html(new_draws: list, dry_run: bool = False,
     rec_lines = []
     for i in range(0, len(all_records), 5):
         chunk  = all_records[i:i+5]
-        parts  = [f"{{p:{r['p']},n:[{','.join(str(n) for n in r['n'])}]}}" for r in chunk]
+        # 2026-11-27 起每期帶開獎日期 dt（官方 lotteryDate），格式同 F5：{p:..,dt:"YYYY-MM-DD",n:[..]}
+        parts  = [(f"{{p:{r['p']},dt:\"{r['dt']}\",n:[" if r.get('dt') else f"{{p:{r['p']},n:[")
+                  + ','.join(str(n) for n in r['n']) + "]}" for r in chunk]
         suffix = "," if i + 5 < len(all_records) else ""
         rec_lines.append("  " + ",".join(parts) + suffix)
     new_base_rec = "const BASE_REC = [\n" + "\n".join(rec_lines) + "\n];"
