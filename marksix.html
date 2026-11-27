@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="六合彩開獎紀錄、統計與每期 4 組可驗證選號（期號種子公開演算法，事前發布）。所有統計僅描述過去，不代表未來。">
+<meta name="theme-color" content="#16a34a">
+<meta property="og:title" content="香港六合彩 分析">
+<meta property="og:description" content="六合彩開獎紀錄、統計與每期 4 組可驗證選號（期號種子公開演算法，事前發布）。所有統計僅描述過去，不代表未來。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://a2963388-cyber.github.io/539/marksix.html">
 <title>香港六合彩 分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍀%3C/text%3E%3C/svg%3E">
 <style>
@@ -12,7 +18,7 @@
   --primary: #16a34a;
   --primary-dk: #15803d;
   --text: #1e293b;
-  --muted: #64748b;
+  --muted: #475569;
   --border: #e2e8f0;
   --z1: #2563eb; --z1-bg: #dbeafe;
   --z2: #16a34a; --z2-bg: #dcfce7;
@@ -136,6 +142,7 @@ textarea:focus { border-color: var(--primary); }
   .input-row { flex-direction: column; align-items: flex-start; }
   .num-wrap { flex-wrap: wrap; max-width: 100%; }
 }
+input, select, textarea { font-size: 16px !important; }  /* iOS 聚焦自動放大：字級需 ≥16px */
 </style>
 </head>
 <body>
@@ -144,19 +151,20 @@ textarea:focus { border-color: var(--primary); }
   <h1>🔴 香港六合彩 分析</h1>
   <div id="hdr-info">載入中…</div>
 </header>
+<div class="game-nav" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;background:#f1f5f9;font-size:.82rem"><a href="index.html" style="padding:4px 10px;border-radius:999px;text-decoration:none;background:#fff;color:#1e293b;border:1px solid #cbd5e1">🍀 今彩539</a><a href="fantasy5.html" style="padding:4px 10px;border-radius:999px;text-decoration:none;background:#fff;color:#1e293b;border:1px solid #cbd5e1">🌟 Fantasy 5</a><a href="marksix.html" style="padding:4px 10px;border-radius:999px;text-decoration:none;background:#16a34a;color:#fff;font-weight:700">🔴 六合彩</a></div>
 
 <div class="input-card">
   <h2>＋ 輸入最新開獎號碼</h2>
   <div class="input-row">
-    <input id="inp-period" type="number" placeholder="期號" />
+    <input id="inp-period" type="number" inputmode="numeric" placeholder="期號" />
     <div class="num-wrap">
-      <input class="ni" type="number" min="1" max="49" placeholder="01" />
-      <input class="ni" type="number" min="1" max="49" placeholder="02" />
-      <input class="ni" type="number" min="1" max="49" placeholder="03" />
-      <input class="ni" type="number" min="1" max="49" placeholder="04" />
-      <input class="ni" type="number" min="1" max="49" placeholder="05" />
-      <input class="ni" type="number" min="1" max="49" placeholder="06" />
-      <input class="ni" type="number" min="1" max="49" placeholder="特別" id="inp-extra" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="01" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="02" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="03" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="04" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="05" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="06" />
+      <input class="ni" type="number" inputmode="numeric" min="1" max="49" placeholder="特別" id="inp-extra" />
     </div>
     <button class="btn" onclick="addDraw()">送出 → 快報</button>
   </div>
@@ -165,7 +173,7 @@ textarea:focus { border-color: var(--primary); }
 <nav class="tabs">
   <button class="tab-btn" onclick="go('report')">📋 快報</button>
   <button class="tab-btn active" onclick="go('pick')">🎯 選號</button>
-  <button class="tab-btn" onclick="go('annual')">📈 年度規律</button>
+  <button class="tab-btn" onclick="go('annual')">📈 期間規律</button>
   <button class="tab-btn" onclick="go('stats')">📊 統計</button>
   <button class="tab-btn" onclick="go('records')">📜 紀錄</button>
   <button class="tab-btn" onclick="go('settings')">⚙️ 設定</button>
@@ -382,8 +390,7 @@ function buildReturnDist(records) {
 
 
 
-// 雙信號合成預測：S3年度熱度(60%) + S4近期動能(40%)
-// 回測驗證：逾期壓力~1.09×（無效）已完全剔除；動能×年度雙信號達1.66×隨機
+// （舊制雙信號註解已移除：2026-08-16 全歷史回測證實各類訊號皆無預測價值）
 
 
 // ── UI HELPERS ─────────────────────────────────────────────
@@ -670,7 +677,7 @@ function renderHistReport(el) {
   </div>`;
   function noteR(d) {
     if (d.abBefore===0) return '連莊';
-    if (d.ratio>=2.0) return '⭐ 超期回歸';
+    if (d.ratio>=2.0) return '沉寂 ≥2 倍後開出';
     if (d.ratio>=1.0) return '逾期回歸';
     return '正常回歸';
   }
@@ -716,7 +723,7 @@ function renderHistReport(el) {
         const hn=new Set(logEntry.hitNums?.[k]??(logEntry.strategies?.[k]?.filter(n=>logEntry.result?.includes(n))??[]));
         const nums=logEntry.strategies?.[k]||[];
         const clr=h>=3?'#dc2626':h>=2?'#d97706':h>=1?'#16a34a':'#94a3b8';
-        const numStr=nums.map(n=>hn.has(n)?`<b style="color:#16a34a">${f2(n)}</b>`:`<span style="color:#94a3b8;font-size:.85em">${f2(n)}</span>`).join(' ');
+        const numStr=nums.map(n=>hn.has(n)?`<b style="color:#16a34a">${f2(n)}</b>`:`<span style="color:#64748b;font-size:.85em">${f2(n)}</span>`).join(' ');
         return `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:110px">
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:3px">${k}</div>
           <div style="font-size:.8rem;margin-bottom:3px">${numStr}</div>
@@ -793,7 +800,7 @@ function renderReport(el){
 
   function note(d){
     if(d.abBefore===0) return '連莊';
-    if(d.ratio>=2.0) return '⭐ 超期回歸';
+    if(d.ratio>=2.0) return '沉寂 ≥2 倍後開出';
     if(d.ratio>=1.0) return '逾期回歸';
     return '正常回歸';
   }
@@ -903,7 +910,7 @@ function observation(R,sOD){
   const maxZ=[1,2,3,4].reduce((a,b)=>zd[a]>zd[b]?a:b);
   if(zd[maxZ]>=3) lines.push(`${ZL[maxZ]} 本期開出 ${zd[maxZ]} 碼。`);
   if(sOD.length) lines.push(`沉寂較久：${sOD.slice(0,3).map(n=>`${f2(n)}（×${od(n)}倍）`).join('、')} 目前已超過 2 倍平均間隔（僅描述，每期獨立）。`);
-  if(!lines.length) lines.push('本期走勢平穩，無特殊異常，可參考選號分析。');
+  if(!lines.length) lines.push('本期沒有特別需要標註的開獎型態。');
   return lines.join('<br>');
 }
 
@@ -946,8 +953,9 @@ function renderPick(el){
   <div class="card">
     <h3>📋 近 10 期區間冷熱</h3>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <span>熱區：<span class="tag tag-hot">${ZN[hot]} ${zc[hot]}次</span></span>
-      <span>冷區：<span class="tag tag-cold">${ZN[cold]} ${zc[cold]}次</span></span>
+      <span>最多：<span class="tag tag-gray">${ZN[hot]} ${zc[hot]}次</span></span>
+      <span>最少：<span class="tag tag-gray">${ZN[cold]} ${zc[cold]}次</span></span>
+      <span style="font-size:.72rem;color:var(--muted)">（僅描述近 10 期）</span>
     </div>
   </div>
 `;
@@ -969,7 +977,9 @@ function renderAnnual(el){
 
   // color helpers
   // 2026-11-27：原本寫死 25/13 次（資料少時定的），期數變多後幾乎全被標熱；改相對期望值
-  const freqClr=f=>f>=expF*1.15?'#dc2626':f>=expF*1.05?'#d97706':f<=expF*0.85?'#2563eb':f<=expF*0.95?'#64748b':'var(--text)';
+  // 2026-11-27：±15% 約等於 1σ，純隨機下約 3 成號碼會被標記 → 改二項分佈 ±2σ
+  const sdF=Math.sqrt(T*6/49*(1-6/49));
+  const freqClr=f=>f>=expF+2*sdF?'#dc2626':f>=expF+sdF?'#d97706':f<=expF-2*sdF?'#2563eb':f<=expF-sdF?'#64748b':'var(--text)';
   const biasClr=b=>b>=15?'#dc2626':b>=8?'#d97706':b<=-15?'#2563eb':b<=-8?'#64748b':'var(--text)';
   const biasBg=b=>b>=15?'#fee2e2':b>=8?'#fef3c7':b<=-15?'#dbeafe':b<=-8?'#e0e7ff':'';
 
@@ -988,7 +998,7 @@ function renderAnnual(el){
 
   <div class="card">
     <h3>🔥 號碼出現次數排行（全49號，僅描述）</h3>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">紅色＝高於期望 15% 以上／藍色＝低於期望 15% 以上／期望 ${expF} 次（僅描述）</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">「偏多／偏少」＝超出期望 ±2 個標準差（±${(2*sdF).toFixed(1)} 次）；期望 ${expF} 次（僅描述，純隨機下約 5% 號碼會被標到）</div>
     ${ranking.map((n,i)=>{
       const f=freq[n], diff=f-expF, pct=+((f/expF-1)*100).toFixed(0);
       const barW=Math.min((f/maxF)*100,100);
@@ -1000,7 +1010,7 @@ function renderAnnual(el){
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
             <span style="font-size:.85rem;font-weight:700;color:${clr}">${f}次</span>
             <span style="font-size:.72rem;color:${clr}">${diff>=0?'+':''}${diff}（${pct>0?'+':''}${pct}%）</span>
-            ${f>=expF*1.15?'<span class="tag tag-hot">偏多</span>':f<=expF*0.85?'<span class="tag tag-cold">偏少</span>':''}
+            ${f>=expF+2*sdF?'<span class="tag tag-hot">偏多</span>':f<=expF-2*sdF?'<span class="tag tag-cold">偏少</span>':''}
           </div>
           <div class="bar-wrap"><div class="bar-fill" style="width:${barW}%;background:${clr}"></div></div>
         </div>
@@ -1012,11 +1022,12 @@ function renderAnnual(el){
     <h3>🎯 尾數分佈（本頁期間，僅描述性）</h3>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">尾0 因只有4個號碼（10,20,30,40），理論期望較低（${+(T*6*4/49).toFixed(1)}次 vs 其他尾數${+(T*6*5/49).toFixed(1)}次）</div>
     <table>
-      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual','期間實際')}<th>理論值</th>${thSort('ann-tail','bias','年度偏差')}<th>對應號碼</th></tr></thead>
+      <thead><tr>${thSort('ann-tail','ti','尾數')}${thSort('ann-tail','actual','期間實際')}<th>理論值</th>${thSort('ann-tail','bias','偏差')}<th>對應號碼</th></tr></thead>
       <tbody>${applySort(Object.entries(A.tailBias).map(([t,bias])=>{const ti=+t;const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>n%10===ti);return {ti,bias,actual:nums.reduce((s,n)=>s+freq[n],0),nums};}), 'ann-tail','bias','desc').map(({ti,bias,actual,nums})=>{
         const exp=ti===0?+(T*6*4/49).toFixed(1):+(T*6*5/49).toFixed(1);
-        const clr=biasClr(bias);
-        const bg=biasBg(bias);
+        const zt=(actual-exp)/Math.sqrt(T*6*(nums.length/49)*(1-nums.length/49));
+        const clr=zt>=2?'#dc2626':zt>=1?'#d97706':zt<=-2?'#2563eb':zt<=-1?'#64748b':'var(--text)';
+        const bg=zt>=2?'#fee2e2':zt<=-2?'#dbeafe':'';
         return `<tr style="background:${bg}">
           <td><strong style="font-size:1.1rem;color:${clr}">尾${ti}</strong></td>
           <td style="text-align:center;font-weight:700;color:${clr}">${actual}</td>
@@ -1162,8 +1173,9 @@ function renderStats(el){
       <thead><tr>${thSort('st-tail','t','尾數')}${thSort('st-tail','act50','50期實際')}<th>50期理論</th>${thSort('st-tail','b50','偏移')}${thSort('st-tail','b100','100期偏移')}<th>號碼</th></tr></thead>
       <tbody>${applySort(Array.from({length:10},(_,i)=>({t:i,act50:tail50[i],b50:tailBias50(i),b100:+((tail100[i]/exp100(i)-1)*100).toFixed(1)})),'st-tail','b50','desc').map(({t,act50,b50,b100})=>{
         const nums=Array.from({length:49},(_,i)=>i+1).filter(n=>n%10===t);
-        const color=b50>=20?'#dc2626':b50<=-15?'#2563eb':b50>=10?'#d97706':'var(--text)';
-        const bg=b50>=20?'#fee2e2':b50<=-15?'#dbeafe':'';
+        const z50=(act50-exp50(t))/Math.sqrt(50*6*(nums.length/49)*(1-nums.length/49));
+        const color=z50>=2?'#dc2626':z50<=-2?'#2563eb':Math.abs(z50)>=1?'#d97706':'var(--text)';
+        const bg=z50>=2?'#fee2e2':z50<=-2?'#dbeafe':'';
         return `<tr style="background:${bg}">
           <td><strong style="font-size:1rem;color:${color}">尾${t}</strong></td>
           <td style="text-align:center;font-weight:600;color:${color}">${act50}</td>
@@ -1313,7 +1325,7 @@ function statsFromVals(vals,mu0){
 function renderTrack(el) {
   const POOL=49, PICK=6;
   const gNames = {G1:'📅年度熱號(停)',G2:'⚡近期動能',G3:'⚖️均衡區間(停)',G4:'🌡️冷轉熱',G5:'🎯熱尾優先(停)',G6:'⏳遺漏壓力',G7:'📡雙信號預測',G8:'🎰年度+動能(停)',G9:'🔁回歸熱區',G10:'🧬回歸+超期',G11:'🧊冷門組合',GC:'🗳️覆蓋立柱',G0:'🎲隨機對照'};
-  const gLabel = k => gNames[k] || (k+' 組');
+  const gLabel = k => gNames[k] ? gNames[k].replace(/\(停\)|預測/g,'')+'（已退役）' : (k+' 組');
   // 新制（v2＝4組×3碼）與舊制（10策略×8碼）分流統計：混算是無意義數字
   const v2Log  = pickLog.filter(l=>l.v>=2 && l.hits);
   const oldLog = pickLog.filter(l=>!(l.v>=2) && l.hits);
@@ -1366,7 +1378,7 @@ function renderTrack(el) {
             if(h===undefined) return '';
             const hn=new Set((l.hitNums&&l.hitNums[k])||((l.strategies[k]||[]).filter(n=>(l.result||[]).includes(n))));
             const clr=h>=3?'#dc2626':h>=2?'#d97706':h>=1?'#16a34a':'#94a3b8';
-            const numStr=(l.strategies[k]||[]).map(n=>hn.has(n)?`<b style="color:#16a34a">${f2(n)}</b>`:`<span style="color:#94a3b8;font-size:.85em">${f2(n)}</span>`).join(' ');
+            const numStr=(l.strategies[k]||[]).map(n=>hn.has(n)?`<b style="color:#16a34a">${f2(n)}</b>`:`<span style="color:#64748b;font-size:.85em">${f2(n)}</span>`).join(' ');
             return `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:4px 8px">
               <span style="font-size:.75rem;color:var(--muted)">${gLabel(k)}</span>
               <span style="font-size:.76rem;margin:0 4px">${numStr}</span>
@@ -1401,7 +1413,7 @@ function renderTrack(el) {
   </div>
 
   <div class="card">
-    <h3>🔒 本期預測狀態</h3>
+    <h3>🔒 本期選號狀態</h3>
     ${pendHTML}
   </div>
 
@@ -1599,30 +1611,27 @@ function applyStats(){
 }
 
 function resetAll(){
-  if(!confirm('確認重設全部資料回預設值？\n（含開獎紀錄、統計、押注紀錄）')) return;
-  rec=JSON.parse(JSON.stringify(BASE_REC)); _dormTbl=null;
-  st=JSON.parse(JSON.stringify(BASE_ST));
-  retHist={};
-  conStat=buildConStat(rec);
-  pendingPick=null;
-  pickLog=[];
-  savePickLog();
-  save();
-  lastReport=null;
+  if(!confirm('確認重設全部資料回預設值？\n（只清除本機手動追加的開獎與兌獎紀錄）')) return;
+  // 2026-11-27：原本手動清空各變數，retHist／lastReport／pending／兌獎紀錄都沒重建，要重新整理才恢復
+  ['r','s','h','pl','pp'].forEach(k=>lsDel('m6'+k));
+  _histFull=null; _histFullLoading=false;
+  load();
   updateHdr();
-  alert(`✅ 已重設完成！\n${rec[0].draw||rec[0].p}（${rec[0].dt||""}），共 ${rec.length} 筆。\n押注紀錄已清空。`);
+  alert(`✅ 已重設完成！\n${rec[0].draw||rec[0].p}（${rec[0].dt||""}），共 ${rec.length} 筆。\n本機追加的兌獎紀錄已清除。`);
   go('pick');
 }
 
 // ── ADD DRAW ───────────────────────────────────────────────
 function addDraw(){
   const pv=parseInt(document.getElementById('inp-period').value);
-  const ni=[...document.querySelectorAll('.ni')];
+  const ni=[...document.querySelectorAll('.ni:not(#inp-extra)')];
   const nums=ni.map(i=>parseInt(i.value)).filter(n=>n>=1&&n<=49);
 
   if(!pv||pv<24000){ alert('請輸入有效期號（如 26067）'); return; }
   if(nums.length!==6){ alert('請輸入6個 01–49 的號碼'); return; }
   if(new Set(nums).size!==6){ alert('號碼不可重複'); return; }
+  const exIn=document.getElementById('inp-extra'); const exV=exIn&&exIn.value?parseInt(exIn.value):0;
+  if(exV&&(exV<1||exV>49||nums.includes(exV))){ alert('特別號需為 01–49，且不可與主號重複'); return; }
   if(rec[0]&&pv<=rec[0].p){ alert(`期號需大於目前最新（${rec[0].p}）`); return; }
 
   const sorted=nums.sort((a,b)=>a-b);
@@ -1656,7 +1665,11 @@ function addDraw(){
     st[n].ab = sorted.includes(n) ? 0 : st[n].ab+1;
   }
 
-  // check pending pick against this draw result
+  // check pending pick against this draw result（期號須等於發布時的 forPeriod，跳期不兌獎）
+  if(pendingPick && pendingPick.forPeriod && pendingPick.forPeriod!==pv){
+    alert(`本期選號是給第 ${pendingPick.forPeriod} 期的，與輸入的 ${pv} 不同，這期不自動兌獎。`);
+    pendingPick=null;
+  }
   if(pendingPick) {
     const hits = {};
     const hitNums = {};
@@ -1672,10 +1685,11 @@ function addDraw(){
 
   // add record
   const extraNum=parseInt(document.getElementById('inp-extra')?.value||'0')||0;
-  rec.unshift({p:pv,dt:new Date().toISOString().split('T')[0],n:sorted,e:extraNum});
+  rec.unshift({p:pv,draw:String(pv).slice(0,2)+'/'+String(pv).slice(2),dt:new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10),n:sorted,e:extraNum});
   if(document.getElementById('inp-extra')) document.getElementById('inp-extra').value='';
   ANNUAL = buildAnnual(rec);
   save();
+  _dtMap=null; _histFull=null; _histFullLoading=false;  // 新增一期後全歷史統計重算
 
   lastReport={period:pv,nums:sorted,drawn,zoneDist:zd,repeatNums,idx:0};
 
@@ -1704,7 +1718,7 @@ document.querySelectorAll('.ni').forEach((inp,i,all)=>{
 function updateHdr(){
   const r=rec[0];
   document.getElementById('hdr-info').innerHTML=r
-    ?`${r.draw||r.p}（${r.dt||''}）<br>${r.n.map(f2).join(' ')} <span style='color:#fde68a'>+${r.e||'?'}</span>`
+    ?`最新：第 ${r.draw||r.p} 期${dtTag(r.p)?' '+dtTag(r.p):''}<br>${r.n.map(f2).join(' ')} <span style='color:#fde68a'>+${r.e||'?'}</span>`
     :'尚無紀錄';
 }
 

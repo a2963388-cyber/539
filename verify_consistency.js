@@ -17,7 +17,7 @@ let allOk=true;
 
 const GAMES={ '539':{pool:39,zones:[0,1,2,3]}, 'f5':{pool:39,zones:[0,1,2,3]}, 'm6':{pool:49,zones:[0,1,2,3,4]} };
 
-function structCheck(game,pending,lastDraw){
+function structCheck(game,pending,lastDraw,recNums){
   const errs=[];
   if(!pending) return ['無 BASE_PENDING'];
   // 🔴 勿寫死版號：原為 v!==2&&v!==3，每次改版都得記得回來加數字，
@@ -75,6 +75,13 @@ function structCheck(game,pending,lastDraw){
       if(out.length) errs.push(`選號不在三池內 ${out}`);
       if(lastDraw&&lastDraw.length&&JSON.stringify([...lastDraw].sort((a,b)=>a-b))!==JSON.stringify(P.lz)) errs.push('連莊池≠上期號碼');
     }
+    if(P&&recNums&&recNums.length){
+      const T=game==='m6'?8:7, ab={};
+      for(let n=1;n<=GAMES[game].pool;n++){ let g=0; for(const r of recNums){ if(r.includes(n)) break; g++; } ab[n]=g; }
+      const exp={lz:[],gap1:[],od:[]};
+      for(let n=1;n<=GAMES[game].pool;n++){ if(ab[n]===0) exp.lz.push(n); else if(ab[n]===1) exp.gap1.push(n); else if(ab[n]>=T) exp.od.push(n); }
+      for(const k of ['lz','gap1','od']) if(JSON.stringify(exp[k])!==JSON.stringify(P[k])) errs.push(`${k} 與開獎紀錄推算不符`);
+    }
     if('excluded' in pending) errs.push('v5 不得帶 excluded');
   }
   return errs;
@@ -105,6 +112,13 @@ function check(game,dataFile,htmlFile,label){
     addEventListener:()=>{}, removeEventListener:()=>{}, setTimeout:()=>0, setInterval:()=>0, clearTimeout:()=>{}, clearInterval:()=>{},
     requestAnimationFrame:()=>0, fetch:()=>Promise.resolve({ok:false,json:()=>Promise.resolve({})}), matchMedia:()=>({matches:false,addListener(){},addEventListener(){}})};
   sandbox.window=sandbox; sandbox.globalThis=sandbox; sandbox.__mkEl=mkEl;
+  // v5 fixture（2026-11-27）：用引擎對同一份 data 算出 v5 pending，供 renderPick 的 v5 分支測試
+  try{
+    const js=cp.execFileSync('/usr/bin/python3',['-c',
+      `import json,sys;sys.path.insert(0,${JSON.stringify(dir)});import pick_engine as p;print(json.dumps(p.gen_pending_core(${JSON.stringify(game)},p._read_records(${JSON.stringify(game)}))))`],
+      {encoding:'utf8'});
+    const fx=JSON.parse(js); if(fx&&fx.v>=5) sandbox.__V5FIXTURE=fx;
+  }catch(e){ /* 引擎不可用時略過 fixture */ }
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(dir+dataFile,'utf8'),sandbox);
   let errs=[];
@@ -124,21 +138,42 @@ function check(game,dataFile,htmlFile,label){
         try{ if(typeof this[fn]==='function'||typeof eval(fn)==='function') eval(fn)(__mkEl()); }catch(e){ errs.push(fn+':'+e.message); }
       }
       const pend=BASE_PENDING||null;
-      let missing=[];
-      if(pend&&pend.strategies){
+      // 🔴 2026-11-27：原本整頁 includes 比對；v5 的「本期三池」區塊會把池內所有號碼畫成球，
+      //    選號必為三池子集 ⇒ 就算 A–D 組卡片沒畫出來也恆過。改為逐組只看該組卡片內的前 3 顆球。
+      const groupMissing=(html,strategies)=>{
+        const miss=[];
         const f2=n=>String(n).padStart(2,'0');
-        for(const nums of Object.values(pend.strategies))
-          for(const n of nums) if(!pickHTML.includes('>'+f2(n)+'<')) missing.push(n);
+        for(const [k,nums] of Object.entries(strategies)){
+          const i=html.indexOf('>'+k+' 組</div>');
+          if(i<0){ miss.push(...nums); continue; }
+          const got=[...html.slice(i, i+1200).matchAll(/class="ball[^"]*">(\\d{2})<\\/span>/g)].slice(0,3).map(m=>+m[1]);
+          for(const n of nums) if(!got.includes(n)) miss.push(n);
+        }
+        return miss;
+      };
+      let missing=(pend&&pend.strategies)?groupMissing(pickHTML,pend.strategies):[];
+      // v5 分支 fixture：data 仍是舊版時，也用引擎輸出的 v5 pending 跑一次 renderPick，確保新版卡片每次都被測到
+      let v5fx=null;
+      if(typeof __V5FIXTURE!=='undefined'&&__V5FIXTURE&&!(pend&&pend.v>=5)){
+        const saved=pendingPick; let html2='';
+        const el2={ set innerHTML(v){ html2=String(v); }, get innerHTML(){ return html2; } };
+        try{ pendingPick=__V5FIXTURE; renderPick(el2);
+             const m2=groupMissing(html2,__V5FIXTURE.strategies);
+             const poolsShown=html2.includes('本期三池');
+             v5fx={ok:!m2.length&&poolsShown, missing:m2, poolsShown};
+        }catch(e){ v5fx={ok:false,err:e.message}; }
+        pendingPick=saved;
       }
-      return JSON.stringify({errs, missing, pend, lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
+      return JSON.stringify({errs, missing, pend, v5fx, rec:(typeof BASE_REC!=='undefined')?BASE_REC.slice(0,60).map(r=>r.n):[], lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
     })()
   `,sandbox);
   const r=JSON.parse(out);
   errs=errs.concat(r.errs);
-  const struct=structCheck(game,r.pend,r.lastDraw);
+  const struct=structCheck(game,r.pend,r.lastDraw,r.rec);
   const parts=[];
   parts.push(errs.length?`❌ 腳本錯誤:${errs.join('|')}`:'✅ 腳本零錯誤');
   parts.push(r.missing.length?`❌ 顯示缺號:${r.missing.join(',')}`:'✅ 顯示=發布');
+  if(r.v5fx) parts.push(r.v5fx.ok?'✅ v5卡片渲染':`❌ v5卡片渲染:${r.v5fx.err||('缺號 '+r.v5fx.missing+(r.v5fx.poolsShown?'':'／無三池區塊'))}`);
   if(struct===null) parts.push('ℹ️ 舊格式 pending（相容期，跳過結構驗規）');
   else parts.push(struct.length?`❌ 結構:${struct.join('|')}`
                                :`✅ v${r.pend.v} 結構合規`);
@@ -184,7 +219,7 @@ function check(game,dataFile,htmlFile,label){
       }
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }
   }
-  const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false);
+  const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false)&&(!r.v5fx||r.v5fx.ok);
   if(!ok) allOk=false;
   console.log(`${label}: ${parts.join(' | ')}`);
 }
