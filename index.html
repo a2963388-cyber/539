@@ -1458,22 +1458,19 @@ function renderStats(el){
     ${numsWithHist.length === 0
       ? '<div style="color:var(--muted);font-size:.83rem">尚無紀錄。每次輸入新開獎號碼後自動累積。</div>'
       : `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ret-tbl">
-      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','count','回歸次數')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','havg','全歷史平均間隔')}${thSort('st-ret','od','逾期倍數')}${thSort('st-ret','min','最短')}${thSort('st-ret','max','最長')}<th>上次沉寂</th></tr></thead>
-      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);const HF=_histFull&&!_histFull.err?_histFull:null;const havg=HF&&HF.avg[n]!=null?+HF.avg[n].toFixed(1):null;const cur=HF?HF.cur[n]:null;const od=havg&&cur!=null?+(cur/havg).toFixed(2):null;return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,havg,cur,od,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','count','desc').map(({n,count,avg,min,max,last,diff,havg,cur,od}) => {
+      <thead><tr>${thSort('st-ret','n','號碼')}${thSort('st-ret','avg','近期平均沉寂')}${thSort('st-ret','havg','全歷史平均間隔')}${thSort('st-ret','od','逾期倍數')}<th>上次沉寂</th></tr></thead>
+      <tbody>${applySort(numsWithHist.map(n=>{const s=retStats(n);const HF=_histFull&&!_histFull.err?_histFull:null;const havg=HF&&HF.avg[n]!=null?+HF.avg[n].toFixed(1):null;const cur=HF?HF.cur[n]:null;const od=havg&&cur!=null?+(cur/havg).toFixed(2):null;return {n,count:s.count,avg:+s.avg,min:s.min,max:s.max,last:s.last,havg,cur,od,diff:st[n]?.ag?(+s.avg-st[n].ag).toFixed(1):null};}), 'st-ret','od','desc').map(({n,count,avg,min,max,last,diff,havg,cur,od}) => {
         const odColor = od===null?'var(--muted)':od>=2?'#dc2626':od>=1.5?'#d97706':od>=1?'var(--text)':'var(--muted)';
         const hfCell = _histFull===null?'<span style="color:var(--muted);font-size:.75rem">載入中…</span>':(_histFull.err?'<span style="color:var(--muted);font-size:.75rem">讀取失敗</span>':null);
         const diffColor = diff === null ? '' : parseFloat(diff) > 0 ? 'color:#dc2626' : parseFloat(diff) < 0 ? 'color:#16a34a' : '';
         return `<tr>
           <td>${ball(n,'ball-sm')}</td>
-          <td style="text-align:center;font-weight:600">${count}</td>
           <td style="text-align:center">
             <strong>${avg}</strong>期
             ${diff !== null ? `<span class="ret-diff" style="font-size:.72rem;${diffColor}">(${parseFloat(diff)>0?'+':''}${diff})</span>` : ''}
           </td>
           <td style="text-align:center">${hfCell ?? (havg===null?'—':`<strong>${havg}</strong>期`)}</td>
           <td style="text-align:center;font-weight:700;color:${odColor}">${hfCell ?? (od===null?'—':`${od}×<div style="font-size:.7rem;font-weight:400;color:var(--muted)">目前 ${cur} 期</div>`)}</td>
-          <td style="text-align:center">${min}期</td>
-          <td style="text-align:center">${max}期</td>
           <td style="text-align:center;font-size:.78rem;color:var(--muted)">${last.gap}期<br>第${last.period}期${dtTag(last.period)?'<br>'+dtTag(last.period):''}</td>
         </tr>`;
       }).join('')}</tbody>
