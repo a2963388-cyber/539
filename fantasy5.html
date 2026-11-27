@@ -1059,7 +1059,7 @@ function renderPick(el){
   el.innerHTML=`
   ${lastReport ? `<div style="background:linear-gradient(135deg,#1a3a1a,#0d2b0d);border:1px solid #2d6a2d;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
     <div>
-      <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期${dtTag(lastReport.period)?'（'+dtTag(lastReport.period)+'）':''}已登錄</span>
+      <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期${dtTag(lastReport.period)?' '+dtTag(lastReport.period):''}已登錄</span>
       <span style="color:var(--muted);font-size:.8rem;margin-left:8px">開出：${lastReport.nums.map(n=>`<b style="color:#e2e8f0">${String(n).padStart(2,'0')}</b>`).join(' ')}</span>
     </div>
     <button onclick="go('report')" style="background:#2d6a2d;border:none;color:#4ade80;font-size:.78rem;padding:4px 10px;border-radius:6px;cursor:pointer">📋 查看快報</button>
@@ -1582,7 +1582,7 @@ function renderTrack(el) {
       const bestG=l.hits?(Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0]:'';
       return `<div style="border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${dtTag(l.period)?'（'+dtTag(l.period)+'）':''}${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
+          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${dtTag(l.period)?' '+dtTag(l.period):''}${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
           <span style="font-size:.75rem">開出 ${(l.result||[]).map(f2).join(' ')}</span>
           <span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">最佳 ${bestG?gLabel(bestG):'—'} ${maxH}碼</span>
         </div>
