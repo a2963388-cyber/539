@@ -206,6 +206,7 @@ function dtOf(p) {
   return _dtMap[p] || '';
 }
 // full=true → 2026/11/26（四）；否則 11/26（四）
+function fmtP(p) { const t = String(p); return t; }
 function dtTag(p, full) {
   const d = dtOf(p); if (!d) return '';
   const wd = '日一二三四五六'[new Date(d + 'T00:00:00').getDay()];
@@ -275,12 +276,8 @@ function reconstructLastReport() {
   const sorted = rec[0].n;
   const pv = rec[0].p;
   const drawn = sorted.map(n => {
-    let abBefore = 0;
-    for (let i = 1; i < rec.length; i++) {
-      if (rec[i].n.includes(n)) { abBefore = i - 1; break; }
-      abBefore = i;
-    }
-    return {n, abBefore, ratio: +(abBefore / avgGap(n)).toFixed(2)};
+    const abBefore = dormancyBefore(0, n);
+    return {n, abBefore, ratio: abBefore==null ? null : +(abBefore / avgGap(n)).toFixed(2)};
   });
   const zd = {1:0,2:0,3:0,4:0};
   sorted.forEach(n => {zd[Z(n)]++;});
@@ -331,6 +328,8 @@ function loadPickLog() {
   const basePeriods = new Set(base.map(e=>e.period));
   const extra = local.filter(e=>!basePeriods.has(e.period));
   pickLog = [...extra, ...base];
+  // 2026-11-28：手動新增並兌獎後，BASE_PENDING 的那期已經開過（在 rec 或 pickLog 裡）就不再當本期選號
+  if (pendingPick && pendingPick.forPeriod && ((rec[0] && pendingPick.forPeriod <= rec[0].p) || pickLog.some(e => e.period === pendingPick.forPeriod))) pendingPick = null;
 }
 function savePickLog() {
   // pendingPick 不再持久化（一律來自 BASE_PENDING；2026-08-09）
@@ -495,7 +494,7 @@ function dormancyBefore(i, n) {
   for(let j=i+1; j<rec.length; j++) {
     if(rec[j].n.includes(n)) return j-i-1;
   }
-  return rec.length-i-1;
+  return null;   // 2026-11-28：資料起點之前不可知，原本回傳截斷值，最早一期會全被標成連莊
 }
 
 
@@ -541,6 +540,7 @@ function sameDormancyBlock(idx, items) {
   const byD = {};
   items.forEach(x => {
     const d = (x.d !== undefined) ? x.d : x.abBefore;
+    if (d == null) return;   // 資料起點前，無法對照
     if (byD[d] === undefined) byD[d] = { drawn: [], others: sameDormancyOthers(idx, d) };
     byD[d].drawn.push(x.n);
   });
@@ -583,7 +583,7 @@ function buildReportForIdx(idx) {
   const sorted = [...r.n].sort((a,b)=>a-b);
   const drawn = sorted.map(n => {
     const abBefore = dormancyBefore(idx, n);
-    const ratio = +(abBefore / avgGap(n)).toFixed(2);
+    const ratio = abBefore==null ? null : +(abBefore / avgGap(n)).toFixed(2);
     return {n, abBefore, ratio};
   });
   const zd = {1:0,2:0,3:0,4:0};
@@ -604,7 +604,7 @@ function renderReportHistory(el) {
     r.n.forEach(n=>zd[Z(n)]++);
     const details = r.n.map(n => {
       const d = dormancyBefore(i,n);
-      const ratio = +(d/avgGap(n)).toFixed(2);
+      const ratio = d==null ? null : +(d/avgGap(n)).toFixed(2);
       return {n, d, ratio};
     });
     const superOD = details.filter(x=>x.ratio>=2.0);
@@ -673,10 +673,10 @@ function renderReportHistory(el) {
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
                   ${p.details.map(x=>{
                     const clr=x.ratio>=2.0?'#9333ea':x.ratio>=1.0?'#d97706':'#64748b';
-                    const note=x.d===0?'連莊':x.ratio>=2.0?'超期':x.ratio>=1.0?'逾期':'正常';
+                    const note=x.d==null?'':x.d===0?'連莊':x.ratio>=2.0?'≥2倍':x.ratio>=1.0?'≥1倍':'';
                     return `<div style="display:flex;align-items:center;gap:4px;background:#fff;padding:4px 7px;border-radius:7px;border:1px solid var(--border)">
                       <span class="ball ball-sm ${ZC[Z(x.n)]}">${f2(x.n)}</span>
-                      <span style="font-size:.68rem;color:${clr};font-weight:600">${x.d}期 ×${x.ratio} ${note}</span>
+                      <span style="font-size:.68rem;color:${clr};font-weight:600">${x.d==null?'資料起點前':x.d+'期 ×'+x.ratio} ${note}</span>
                     </div>`;
                   }).join('')}
                 </div>
@@ -708,10 +708,11 @@ function renderHistReport(el) {
     </div>
   </div>`;
   function noteR(d) {
+    if (d.abBefore==null) return '—';
     if (d.abBefore===0) return '連莊';
     if (d.ratio>=2.0) return '沉寂 ≥2 倍後開出';
-    if (d.ratio>=1.0) return '逾期回歸';
-    return '正常回歸';
+    if (d.ratio>=1.0) return '沉寂 ≥1 倍後開出';
+    return '—';
   }
   function odTagR(ratio) {
     if (ratio>=2.0) return `<span class="tag tag-od">×${ratio}倍</span>`;
@@ -730,8 +731,8 @@ function renderHistReport(el) {
       <thead><tr><th>號碼</th><th>沉寂期數</th><th>逾期倍數</th><th>區間</th><th>備註</th></tr></thead>
       <tbody>${R.drawn.map(d=>`<tr>
         <td>${ball(d.n,'ball-sm')}</td>
-        <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
-        <td>${odTagR(d.ratio)}</td>
+        <td>${d.abBefore==null?'—（資料起點前）':d.abBefore===0?'連莊':d.abBefore+' 期後開出'}</td>
+        <td>${d.ratio==null?'—':odTagR(d.ratio)}</td>
         <td><span class="tag tag-gray">${ZL[Z(d.n)]}</span></td>
         <td style="font-size:.78rem">${noteR(d)}</td>
       </tr>`).join('')}</tbody>
@@ -748,7 +749,7 @@ function renderHistReport(el) {
     </div>
   </div>
   ${logEntry?`<div class="card">
-    <h3>🎯 本期預測命中</h3>
+    <h3>🎯 本期選號兌獎</h3>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
       ${gKeys.map(k=>{
         const h=logEntry.hits?.[k]??0;
@@ -831,10 +832,11 @@ function renderReport(el){
   const R=lastReport;
 
   function note(d){
+    if(d.abBefore==null) return '—';
     if(d.abBefore===0) return '連莊';
     if(d.ratio>=2.0) return '沉寂 ≥2 倍後開出';
-    if(d.ratio>=1.0) return '逾期回歸';
-    return '正常回歸';
+    if(d.ratio>=1.0) return '沉寂 ≥1 倍後開出';
+    return '—';
   }
 
   // warnings post-update
@@ -856,8 +858,8 @@ function renderReport(el){
       <thead><tr>${thSort('rpt-drawn','n','號碼')}${thSort('rpt-drawn','abBefore','沉寂期數')}${thSort('rpt-drawn','ratio','逾期倍數')}<th>區間</th><th>備註</th></tr></thead>
       <tbody>${applySort(R.drawn,'rpt-drawn','n','asc').map(d=>`<tr>
         <td>${ball(d.n,'ball-sm')}</td>
-        <td>${d.abBefore===0?'連莊':d.abBefore+'期後回歸'}</td>
-        <td><span class="tag ${d.ratio>=2?'tag-od':d.ratio>=1?'tag-warn':'tag-gray'}">×${d.ratio}倍</span></td>
+        <td>${d.abBefore==null?'—（資料起點前）':d.abBefore===0?'連莊':d.abBefore+' 期後開出'}</td>
+        <td>${d.ratio==null?'—':`<span class="tag ${d.ratio>=2?'tag-od':d.ratio>=1?'tag-warn':'tag-gray'}">×${d.ratio}倍</span>`}</td>
         <td><span class="tag tag-gray">${ZL[Z(d.n)]}</span></td>
         <td style="font-size:.78rem">${note(d)}</td>
       </tr>`).join('')}</tbody>
@@ -954,7 +956,7 @@ function renderPick(el){
   ${lastReport ? `<div style="background:linear-gradient(135deg,#1a3a1a,#0d2b0d);border:1px solid #2d6a2d;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
     <div>
       <span style="color:#4ade80;font-weight:700;font-size:.88rem">✅ 第 ${lastReport.period} 期${dtTag(lastReport.period)?' '+dtTag(lastReport.period):''}已登錄</span>
-      <span style="color:var(--muted);font-size:.8rem;margin-left:8px">開出：${lastReport.nums.map(n=>`<b style="color:#e2e8f0">${String(n).padStart(2,'0')}</b>`).join(' ')}</span>
+      <span style="color:#cbd5e1;font-size:.8rem;margin-left:8px">開出：${lastReport.nums.map(n=>`<b style="color:#e2e8f0">${String(n).padStart(2,'0')}</b>`).join(' ')}</span>
     </div>
     <button onclick="go('report')" style="background:#2d6a2d;border:none;color:#4ade80;font-size:.78rem;padding:4px 10px;border-radius:6px;cursor:pointer">📋 查看快報</button>
   </div>` : ''}
@@ -1002,7 +1004,7 @@ function renderPick(el){
         誠實提醒：期望值與任何買法相同（每注 −44.2%），輪盤只優化中獎「分佈」，不改變期望。
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
-        <input id="wheel-in" type="text" value="${init.map(f2).join(' ')}" style="flex:1;min-width:250px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:.85rem;font-family:monospace">
+        <textarea id="wheel-in" rows="2" style="flex:1 1 100%;width:100%;min-width:0;resize:vertical;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:.85rem;font-family:monospace">${init.map(f2).join(' ')}</textarea>
         <button onclick="buildWheel()" class="btn" style="font-size:.8rem;padding:7px 14px">產生投注單</button>
         <button onclick="document.getElementById('wheel-in').value=wheelSuggest().map(f2).join(' ');buildWheel()" class="btn btn-gray" style="font-size:.8rem;padding:7px 12px">🎯 用本期四組＋隨機補滿自動填</button>
       </div>
@@ -1032,15 +1034,13 @@ function renderAnnual(el){
   // 2026-11-27：±15% 約等於 1σ，純隨機下約 3 成號碼會被標記 → 改二項分佈 ±2σ
   const sdF=Math.sqrt(T*5/39*(1-5/39));
   const freqClr=f=>f>=expF+2*sdF?'#dc2626':f>=expF+sdF?'#d97706':f<=expF-2*sdF?'#2563eb':f<=expF-sdF?'#64748b':'var(--text)';
-  const biasClr=b=>b>=15?'#dc2626':b>=8?'#d97706':b<=-15?'#2563eb':b<=-8?'#64748b':'var(--text)';
-  const biasBg=b=>b>=15?'#fee2e2':b>=8?'#fef3c7':b<=-15?'#dbeafe':b<=-8?'#e0e7ff':'';
 
   el.innerHTML=`
   <div class="card">
     <h3>📈 開獎規律（${firstP}–${lastP}${dtOf(lastP)&&dtOf(firstP)?`｜${dtOf(firstP)}～${dtOf(lastP)}`:''}，共${T}期）</h3>
     <div class="zone-grid" style="margin-bottom:12px">
       ${(()=>{const hotN=A.hotNum,hotF=freq[hotN];const coldTail=Object.entries(A.tailBias).reduce((a,b)=>+b[1]<+a[1]?b:a);return `
-      <div class="zone-box" style="background:#fee2e2"><div class="val" style="color:#dc2626">${String(hotN).padStart(2,'0')}</div><div class="lbl">期間最熱號</div></div>
+      <div class="zone-box" style="background:#fee2e2"><div class="val" style="color:#dc2626">${String(hotN).padStart(2,'0')}</div><div class="lbl">期間出現最多</div></div>
       <div class="zone-box" style="background:#fef3c7"><div class="val" style="color:#d97706">${A.consecRate}%</div><div class="lbl">每期含連號率</div></div>
       <div class="zone-box" style="background:#dcfce7"><div class="val" style="color:#16a34a">${A.avgSum}</div><div class="lbl">平均號碼總和</div></div>
       <div class="zone-box" style="background:#dbeafe"><div class="val" style="color:#2563eb">尾${coldTail[0]}</div><div class="lbl">最冷尾數(${coldTail[1]}%)</div></div>`;})()}
@@ -1208,7 +1208,7 @@ function renderStats(el){
   <div class="card">
     <h3>📊 區間走勢（近5期 vs 前5期）</h3>
     <table>
-      <thead><tr><th>區間</th><th>前5期</th><th>近5期</th><th>合計</th><th>趨勢</th></tr></thead>
+      <thead><tr><th>區間</th><th>前5期</th><th>近5期</th><th>合計</th><th>變化</th></tr></thead>
       <tbody>${[1,2,3,4].map(z=>{
         const r5=zc5r[z],p5=zc5p[z];
         const tr=r5>p5?'增加':r5<p5?'減少':'持平';
@@ -1605,16 +1605,16 @@ function renderCompanion(el) {
   el.innerHTML = `
   <div class="card">
     <h3>🤝 高頻同伴排行 TOP 20（共 ${total} 期）</h3>
-    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">同一期同時出現次數最多的號碼對，隨機期望 ≈ ${randLine} 次</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">同一期同時出現次數最多的號碼對，每對隨機期望 ≈ ${randLine} 次。⚠️ 這是從 741 對裡挑最高的，純隨機下第一名通常也有約 ${Math.round(randLine+Math.sqrt(2*randLine*Math.log(741)))} 次——排名高不代表兩個號碼有關聯（僅描述）。</div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>#</th><th>號碼對</th><th style="text-align:center">共現次數</th><th style="text-align:center">頻率</th><th>相對強度</th></tr></thead>
+      <thead><tr><th>#</th><th>號碼對</th><th style="text-align:center">共現次數</th><th style="text-align:center">頻率</th><th style="color:var(--muted)">次數比例</th></tr></thead>
       <tbody>${topPairs.map(({a,b,cnt,pct},i)=>`
         <tr>
           <td style="color:var(--muted);font-size:.75rem">${i+1}</td>
           <td>${ball(a,'ball-sm')} ${ball(b,'ball-sm')}</td>
           <td style="font-weight:700;text-align:center">${cnt}</td>
           <td style="text-align:center;color:var(--muted);font-size:.8rem">${pct}%</td>
-          <td style="min-width:80px"><div class="bar-wrap"><div class="bar-fill" style="width:${cnt/maxCnt*100}%;background:var(--primary)"></div></div></td>
+          <td style="min-width:80px"><div class="bar-wrap"><div class="bar-fill" style="width:${cnt/maxCnt*100}%;background:#cbd5e1"></div></div></td>
         </tr>`).join('')}
       </tbody>
     </table></div>
@@ -1683,6 +1683,8 @@ function addDraw(){
   if(nums.length!==5){ alert('請輸入5個 01–39 的號碼'); return; }
   if(new Set(nums).size!==5){ alert('號碼不可重複'); return; }
   if(rec[0]&&pv<=rec[0].p){ alert(`期號需大於目前最新期（${rec[0].p}）`); return; }
+  // 2026-11-28：跳號提醒（同年度期號才比；F5 為流水號）
+  if(rec[0]&&Math.floor(pv/1000)===Math.floor(rec[0].p/1000)&&pv!==rec[0].p+1&&!confirm(`上一期是 ${fmtP(rec[0].p)}，輸入的是 ${fmtP(pv)}，中間有缺期。缺期會讓沉寂統計偏差，確定要輸入嗎？`)) return;
 
   const sorted=nums.sort((a,b)=>a-b);
 
@@ -1751,11 +1753,13 @@ function addDraw(){
 
 // ── KEYBOARD SHORTCUTS ─────────────────────────────────────
 document.getElementById('inp-period').addEventListener('keydown',e=>{
-  if(e.key==='Enter'||e.key==='\t') document.querySelectorAll('.ni')[0].focus();
+  if(e.key==='Enter') document.querySelectorAll('.ni')[0].focus();
 });
 document.querySelectorAll('.ni').forEach((inp,i,all)=>{
   inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter') i<all.length-1 ? all[i+1].focus() : addDraw();
+    if(e.key!=='Enter') return;
+    if(i===all.length-1) return addDraw();
+    if(inp.value) all[i+1].focus();   // 2026-11-28：已自動跳到空格時再按 Enter 不再多跳一格
   });
   inp.addEventListener('input',()=>{
     if(inp.value.length>=2&&i<all.length-1) all[i+1].focus();

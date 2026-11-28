@@ -172,7 +172,7 @@ function check(game,dataFile,htmlFile,label){
       // v5 分支 fixture：data 仍是舊版時，也用引擎輸出的 v5 pending 跑一次 renderPick，確保新版卡片每次都被測到
       let v5fx=null;
       if(typeof __V5FIXTURE!=='undefined'&&__V5FIXTURE&&!(pend&&pend.v>=__V5FIXTURE.v)){
-        const saved=pendingPick; let html2='';
+        const saved=(typeof pendingPick!=='undefined')?pendingPick:null; let html2='';
         const el2={ set innerHTML(v){ html2=String(v); }, get innerHTML(){ return html2; } };
         try{ pendingPick=__V5FIXTURE; renderPick(el2);
              const m2=groupMissing(html2,__V5FIXTURE.strategies);
@@ -217,7 +217,10 @@ function check(game,dataFile,htmlFile,label){
         // ⚠️ 但「跳過」不可以變成永久盲點：pending 每次開獎都會重算成新版，
         //    若長期停在舊版，代表 fetch 沒在跑或改版閘門卡住了，那才是真故障。
         const days=(Date.now()-(r.pend.ts||0))/86400000;
-        if(r.pend.ts&&days>7){
+        // 六合 HKJC 會整週停開（2026-08-30~09-04 實例）：來源最新期 ≤ 本地最新期＝真的沒開，不算卡住
+        let m6Idle=false;
+        if(game==='m6'){ try{ const st=JSON.parse(fs.readFileSync(dir+'.m6_source_status.json','utf8')); m6Idle=!!(st.source_ok&&st.source_latest<=st.local_latest); }catch(e){} }
+        if(r.pend.ts&&days>7&&!m6Idle){
           parts.push(`❌ 但此 pending 已 ${days.toFixed(0)} 天未更新 —— 跨版本不該持續這麼久，請查 fetch`);
           recompOk=false;
         }
