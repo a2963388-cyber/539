@@ -219,8 +219,9 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
     ※ forPeriod 僅供顯示；跨年改號（如六合 26/xxx→27/001）時以實際開獎為準。
 
 驗算（給親友）：
-    python3 pick_engine.py 539            # 讀公開 data 檔重算本期四組
-    python3 pick_engine.py 539 115192 "5,11,24,31,32"
+    python3 pick_engine.py 539            # 讀公開 data 檔重算本期四組（v6 三池＋主號）
+    python3 pick_engine.py 539 --at 115288 # 以截至該期的歷史重算（重現已發布號碼用這個）
+    python3 pick_engine.py 539 115192 "5,11,24,31,32"   # 手動試算：只有上期號碼、全池裸算，與正式發布不同
     python3 pick_engine.py --selftest
 """
 
@@ -383,9 +384,13 @@ def _lex_fallback(pool, hi, pool_max, anchors=()):
             return groups if highs >= MIN_HIGH_TOTAL else None
         # 剪枝：剩下的組就算全塞高號也補不到 MIN_HIGH_TOTAL，直接回頭。
         # 字典序從小號開始展開，沒有這道剪枝會把整棵低號子樹走完才發現無解。
-        have = sum(1 for g in groups for n in g if n >= hi)
+        # sfg-v6：後面幾組的主號已保留（不在 remaining），高號要算進去、空位要扣掉，
+        # 否則會把「靠後組主號才湊得到 G3」的分支錯剪（539 第 98073 期實例，2026-11-28 Fable 第四輪）。
+        fut = anchors[len(groups):]
+        have = sum(1 for g in groups for n in g if n >= hi) + sum(1 for a in fut if a >= hi)
         avail = sum(1 for n in remaining if n >= hi)
-        if have + min(avail, 3 * (4 - len(groups))) < MIN_HIGH_TOTAL:
+        cap = 3 * (4 - len(groups)) - len(fut)
+        if have + min(avail, cap) < MIN_HIGH_TOTAL:
             return None
         gi = len(groups)
         cands = ((tuple(sorted((anchors[gi],) + pair)) for pair in combinations(remaining, 2))
@@ -742,6 +747,23 @@ def selftest():
         print(f"[{game}] 主號顆數分佈 " + " ".join(f"{k}顆:{v}" for k, v in anchor_n.items()))
         print(f"[{game}] {n} 期回放完成｜{ALGO}（三池＋主號）｜{ps}"
               f"｜fallback {fallback_n}（pool 回補 {pool_relax_n}、lex {lex_n}）")
+    # 回歸案例：曾經讓引擎當掉的歷史期（需 history_*.json；BASE_REC 只有近一年）
+    import json
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    for game, at in (("539", 98073),):   # 2026-11-28 Fable 第四輪：lex 剪枝漏算後組主號
+        try:
+            H = json.load(open(os.path.join(here, f"history_{game}.json"), encoding="utf-8"))
+        except OSError:
+            print(f"[{game}] 回歸案例 {at}：缺 history 檔，跳過"); continue
+        recs = sorted(({"p": r["p"], "n": r["n"]} for r in H if r["p"] <= at), key=lambda r: -r["p"])[:3000]
+        try:
+            res = gen_pending_core(game, recs)
+            errs = _verify_output(game, recs[0]["n"], res, records=recs)
+            print(f"[{game}] 回歸案例 {at}：", "通過 ✅" if not errs else errs)
+            ok = ok and not errs
+        except RuntimeError as ex:
+            print(f"[{game}] 回歸案例 {at}：🔴 {ex}"); ok = False
     print("SELFTEST", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
 
@@ -805,7 +827,8 @@ def main(argv):
         res = gen_four_groups(game, last_period, last_draw, excluded=excl,
                               readmit_order=sorted(excl))
         _print_core(game, res)
-        errs = _verify_output(game, last_draw, res)
+        # 手動模式沒有歷史、本來就沒有 pools/anchors：用 v4 口徑自檢，免得每次都印「v5 缺 pools／v6 缺 anchors」假錯誤
+        errs = _verify_output(game, last_draw, {**res, "v": 4})
         print("規則自檢:", "全過 ✅" if not errs else errs)
         print("（手動模式只有上期號碼、沒有歷史，算不出 v5 三池：此為全池裸算，"
               "與正式發布不同；要重現正式號碼請用 --at <期號>）")

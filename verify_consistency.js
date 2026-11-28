@@ -177,12 +177,13 @@ function check(game,dataFile,htmlFile,label){
         try{ pendingPick=__V5FIXTURE; renderPick(el2);
              const m2=groupMissing(html2,__V5FIXTURE.strategies);
              const poolsShown=html2.includes('本期三池');
-             v5fx={ok:!m2.length&&poolsShown, missing:m2, poolsShown};
+             const anchorShown=!(__V5FIXTURE.v>=6)||html2.includes('主號');
+             v5fx={ok:!m2.length&&poolsShown&&anchorShown, missing:m2, poolsShown, anchorShown};
         }catch(e){ v5fx={ok:false,err:e.message}; }
         pendingPick=saved;
       }
       if(typeof __V5FIXERR!=='undefined') v5fx={ok:false,err:'v5 fixture '+__V5FIXERR};
-      return JSON.stringify({errs, missing, pend, v5fx, fx:(typeof __V5FIXTURE!=='undefined')?__V5FIXTURE:null, rec:(typeof BASE_REC!=='undefined')?BASE_REC.slice(0,60).map(r=>r.n):[], lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
+      return JSON.stringify({errs, missing, pend, v5fx, fx:(typeof __V5FIXTURE!=='undefined')?__V5FIXTURE:null, rec:(typeof BASE_REC!=='undefined')?BASE_REC.map(r=>r.n):[], lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
     })()
   `,sandbox);
   const r=JSON.parse(out);
@@ -191,7 +192,7 @@ function check(game,dataFile,htmlFile,label){
   const parts=[];
   parts.push(errs.length?`❌ 腳本錯誤:${errs.join('|')}`:'✅ 腳本零錯誤');
   parts.push(r.missing.length?`❌ 顯示缺號:${r.missing.join(',')}`:'✅ 顯示=發布');
-  if(r.v5fx) parts.push(r.v5fx.ok?'✅ 新版卡片渲染':`❌ 新版卡片:${r.v5fx.err||('缺號 '+r.v5fx.missing+(r.v5fx.poolsShown?'':'／無三池區塊'))}`);
+  if(r.v5fx) parts.push(r.v5fx.ok?'✅ 新版卡片渲染':`❌ 新版卡片:${r.v5fx.err||('缺號 '+r.v5fx.missing+(r.v5fx.poolsShown?'':'／無三池區塊')+(r.v5fx.anchorShown===false?'／無主號區塊':''))}`);
   // 新版 fixture 也跑結構驗規（data 仍是舊版時，三池／主號推算才驗得到）
   let fxStruct=null;
   if(r.fx&&!(r.pend&&r.pend.v>=r.fx.v)){ fxStruct=structCheck(game,r.fx,r.lastDraw,r.rec); parts.push(fxStruct.length?`❌ 新版fixture結構:${fxStruct.join('|')}`:`✅ v${r.fx.v} fixture結構合規`); }
@@ -219,7 +220,7 @@ function check(game,dataFile,htmlFile,label){
         const days=(Date.now()-(r.pend.ts||0))/86400000;
         // 六合 HKJC 會整週停開（2026-08-30~09-04 實例）：來源最新期 ≤ 本地最新期＝真的沒開，不算卡住
         let m6Idle=false;
-        if(game==='m6'){ try{ const st=JSON.parse(fs.readFileSync(dir+'.m6_source_status.json','utf8')); m6Idle=!!(st.source_ok&&st.source_latest<=st.local_latest); }catch(e){} }
+        if(game==='m6'){ try{ const st=JSON.parse(fs.readFileSync(dir+'.m6_source_status.json','utf8')); m6Idle=!!(st.source_ok&&st.source_latest<=st.local_latest&&(Date.now()-Date.parse(st.checked_at))<2*86400000); /* 狀態檔超過 2 天沒更新＝fetch 自己停了，不能拿來蓋掉警報 */ }catch(e){} }
         if(r.pend.ts&&days>7&&!m6Idle){
           parts.push(`❌ 但此 pending 已 ${days.toFixed(0)} 天未更新 —— 跨版本不該持續這麼久，請查 fetch`);
           recompOk=false;

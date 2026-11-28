@@ -735,10 +735,10 @@ function renderHistReport(el) {
       <tbody>${R.drawn.map(d=>{
         const h=retHist[d.n]; const allGaps=h?h.map(x=>x.gap):[]; const cnt=allGaps.length;
         const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
-        if(!cnt) return `<tr><td>${ball(d.n,'ball-sm')}</td><td>${d.abBefore}期</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
+        if(!cnt) return `<tr><td>${ball(d.n,'ball-sm')}</td><td>${d.abBefore==null?'—（資料起點前）':d.abBefore+'期'}</td><td colspan="4" style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
         return `<tr>
           <td>${ball(d.n,'ball-sm')}</td>
-          <td style="font-weight:600">${d.abBefore}期</td>
+          <td style="font-weight:600">${d.abBefore==null?'—（資料起點前）':d.abBefore+'期'}</td>
           <td style="text-align:center">${cnt}次</td>
           <td style="text-align:center">${+avg.toFixed(1)}期</td>
           <td style="text-align:center">${Math.min(...allGaps)}期</td>
@@ -1365,7 +1365,7 @@ function renderTrack(el) {
       const bestG=l.hits?(Object.entries(l.hits).sort((a,b)=>b[1]-a[1])[0]||[])[0]:'';
       return `<div style="border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${dtTag(l.period)?' '+dtTag(l.period):''}${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.v>=5?' <span class="tag tag-gray">三池</span>':''}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
+          <span style="font-size:.78rem;color:var(--muted)">第 ${l.period} 期${dtTag(l.period)?' '+dtTag(l.period):''}${l.v>=2?'':' <span class="tag tag-gray">舊制</span>'}${l.v>=5?' <span class="tag tag-gray">三池</span>':''}${l.v>=6?' <span class="tag tag-gray">主號</span>':''}${l.backfill?' <span class="tag tag-gray">補結算</span>':''}</span>
           <span style="font-size:.75rem">開出 ${(l.result||[]).map(f2).join(' ')}</span>
           <span class="tag ${maxH>=3?'tag-hot':maxH>=2?'tag-warn':'tag-gray'}">${maxH>0?`最佳 ${bestG?gLabel(bestG):'—'} ${maxH}碼`:'全部 0 碼'}</span>
         </div>
@@ -1675,7 +1675,7 @@ function addDraw(){
       hits[k] = matched.length;
       hitNums[k] = matched;
     }
-    pickLog.unshift({period:pv, ...(pendingPick.v?{v:pendingPick.v,algo:pendingPick.algo,seed:pendingPick.seed,hi:pendingPick.hi,...(pendingPick.pools?{pools:pendingPick.pools}:{}),...(pendingPick.readmit?{readmit:pendingPick.readmit}:{})}:{}), strategies:pendingPick.strategies, result:sorted, hits, hitNums, ts:pendingPick.ts});
+    pickLog.unshift({period:pv, ...(pendingPick.v?{v:pendingPick.v,algo:pendingPick.algo,seed:pendingPick.seed,hi:pendingPick.hi,...(pendingPick.pools?{pools:pendingPick.pools}:{}),...(pendingPick.anchors?{anchors:pendingPick.anchors,anchorGaps:pendingPick.anchorGaps}:{}),...(pendingPick.relaxed?{relaxed:pendingPick.relaxed}:{}),...(pendingPick.readmit?{readmit:pendingPick.readmit}:{})}:{}), strategies:pendingPick.strategies, result:sorted, hits, hitNums, ts:pendingPick.ts});
     pendingPick = null;
     savePickLog();
   }
