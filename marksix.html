@@ -854,10 +854,10 @@ function renderReport(el){
         const avg=cnt?(allGaps.reduce((a,b)=>a+b,0)/cnt):null;
         return {n:d.n,abBefore:d.abBefore,cnt,avg:avg?+avg.toFixed(1):null,min:cnt?Math.min(...allGaps):null,max:cnt?Math.max(...allGaps):null};
       }),'rpt-ret','n','asc').map(({n,abBefore,cnt,avg,min,max})=>{
-        if(!cnt) return `<tr><td>${ball(n,'ball-sm')}</td><td>${abBefore}期</td><td style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
+        if(!cnt) return `<tr><td>${ball(n,'ball-sm')}</td><td>${abBefore==null?'—（資料起點前）':abBefore+'期'}</td><td style="color:var(--muted);font-size:.78rem">紀錄累積中</td></tr>`;
         return `<tr>
           <td>${ball(n,'ball-sm')}</td>
-          <td style="font-weight:600">${abBefore}期</td>
+          <td style="font-weight:600">${abBefore==null?'—（資料起點前）':abBefore+'期'}</td>
           <td style="text-align:center">${avg}期</td>
         </tr>`;
       }).join('')}
