@@ -26,7 +26,7 @@ except ImportError:
 
 import sys as _sys, os as _os
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
-import pick_engine  # 4×3 選號引擎（sfg-v1 2026-08-09 起；現行 sfg-v5 三池 2026-11-27）
+import pick_engine  # 4×3 選號引擎（sfg-v1 2026-08-09 起；現行 sfg-v6 三池＋逾期開出主號 2026-11-28）
 GAME = 'm6'
 
 DATA_FILE = Path(__file__).parent / "data_m6.js"
@@ -186,7 +186,8 @@ def unpop_score(n):
     return s
 
 def gen_pending(records: list) -> dict:
-    """sfg-v5「三池」四組×3碼（2026-11-27 事前註冊，規格全文在 pick_engine.py 與 BACKTEST_REGISTRY.md §8）。
+    """sfg-v6「三池＋逾期開出主號」四組×3碼（2026-11-28 事前註冊，BACKTEST_REGISTRY.md §9；v5 三池見 §8）。
+    pending 另帶 anchors／anchorGaps（主號與其開出前沉寂），兌獎紀錄一併保存。
     候選池＝連莊∪隔一期∪逾期；pending 帶 pools（三池）與必要時的 readmit，兌獎紀錄一併保存。
 
     以下為 v4 沿革：
@@ -213,7 +214,7 @@ def build_log_entries(new_sorted, base_pending, base_picklog, all_records, st_mg
             continue
         if idx == 0 and base_pending and base_pending.get('strategies'):
             strat, ts, backfill = base_pending['strategies'], base_pending.get('ts', 0), False
-            meta = {k: base_pending[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo', 'pools', 'readmit') if k in base_pending}
+            meta = {k: base_pending[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo', 'pools', 'readmit', 'anchors', 'anchorGaps') if k in base_pending}
             if base_pending.get('relaxed'):
                 meta['relaxed'] = base_pending['relaxed']
             excl = base_pending.get('excluded')
@@ -223,7 +224,7 @@ def build_log_entries(new_sorted, base_pending, base_picklog, all_records, st_mg
                 continue
             core = gen_pending(hist)
             strat, ts, backfill = core.get('strategies'), int(time.time() * 1000), True
-            meta = {k: core[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo', 'pools', 'readmit') if k in core}
+            meta = {k: core[k] for k in ('v', 'algo', 'seed', 'hi', 'exclAlgo', 'pools', 'readmit', 'anchors', 'anchorGaps') if k in core}
             if core.get('relaxed'):
                 meta['relaxed'] = core['relaxed']
             excl = core.get('excluded')

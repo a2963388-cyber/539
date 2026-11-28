@@ -970,16 +970,18 @@ function renderPick(el){
         ${groups.map(([k,nums])=>`<div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 10px;text-align:center">
           <div style="font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:4px">${k} 組</div>
           <div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${nums.map(n=>ball(n)).join('')}</div>
+          ${P.v>=6&&(P.anchors||[]).some(a=>nums.includes(a))?`<div style="font-size:.68rem;color:#b45309;margin-top:3px">主號 ${f2((P.anchors||[]).find(a=>nums.includes(a)))}</div>`:''}
         </div>`).join('')}
       </div>
       ${P.v>=5&&P.pools?`<div style="background:#f8fafc;border:1px dashed var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:.74rem;line-height:1.9">
         <div style="font-weight:700;margin-bottom:2px">🧺 本期三池（共 ${P.pools.lz.length+P.pools.gap1.length+P.pools.od.length} 顆，四組只從這裡抽）</div>
+        ${P.v>=6?`<div>🎯 <strong>主號</strong>（上期逾期開出，各放一組）${(P.anchors||[]).length?` ${P.anchors.length} 顆：`+P.anchors.map((a,i)=>ball(a,'ball-sm')+`<span style="font-size:.68rem;color:var(--muted)">沉寂${(P.anchorGaps||[])[i]}期後開出</span>`).join(' '):'：上期沒有逾期開出號，本期照三池規則'}</div>`:''}
         <div>🔁 <strong>連莊</strong>（上期開出）${P.pools.lz.length} 顆：${P.pools.lz.map(n=>ball(n,'ball-sm')).join('')}</div>
         <div>⏭️ <strong>隔一期</strong>（沉寂 1 期）${P.pools.gap1.length} 顆：${P.pools.gap1.map(n=>ball(n,'ball-sm')).join('')}</div>
-        <div>⏳ <strong>逾期</strong>（沉寂 ≥7 期＝理論平均間隔）${P.pools.od.length} 顆：${P.pools.od.map(n=>ball(n,'ball-sm')).join('')}</div>
+        <div>⏳ <strong>逾期</strong>（沉寂 ≥7 期；理論平均間隔約 7.8 期）${P.pools.od.length} 顆：${P.pools.od.map(n=>ball(n,'ball-sm')).join('')}</div>
         ${P.readmit&&P.readmit.length?`<div style="color:#d97706">↩️ 池太小，依規則回補：${P.readmit.map(n=>ball(n,'ball-sm')).join('')}</div>`:''}
       </div>`:''}
-      ${isV2?`<div style="font-size:.7rem;color:var(--muted);line-height:1.7">🔍 <strong>可驗證</strong>：本期號碼以「上期期號當種子」的公開演算法（pick_engine.py，${P.algo}）產生，任何人可重算得到完全相同結果——事前發布、事後不可改。${P.v>=5?'候選池＝連莊∪隔一期∪逾期（沉寂 ≥7 期）三池，':''}選法避開等差、同尾等大眾簽法，並要求 12 碼中合計至少 ${P.minHigh??3} 碼落在高號區（≥${P.hi}）。<br>⚖️ <strong>誠實揭露</strong>：選號不改變中獎機率。每組 3 碼全中機率約 1/914，任何選法皆同。${P.v>=5?'三池也不例外：全歷史實測每期開出 ≥2 顆逾期號 63.8%，純隨機應為 64.4%——逾期號並沒有比較容易開出。':''}開獎後由系統自動兌獎，結果見「🏆 中獎追蹤」。</div>`:''}
+      ${isV2?`<div style="font-size:.7rem;color:var(--muted);line-height:1.7">🔍 <strong>可驗證</strong>：本期號碼以「上期期號當種子」的公開演算法（pick_engine.py，${P.algo}）產生，任何人可重算得到完全相同結果——事前發布、事後不可改。${P.v>=5?'候選池＝連莊∪隔一期∪逾期（沉寂 ≥7 期）三池，':''}${P.v>=6?'上期逾期開出的號碼（開出前沉寂 ≥7 期，最多 4 顆）依序固定放進 A/B/C/D 各一顆當主號，其餘號碼照三池抽；':''}選法避開等差、同尾等大眾簽法，並要求 12 碼中合計至少 ${P.minHigh??3} 碼落在高號區（≥${P.hi}）。<br>⚖️ <strong>誠實揭露</strong>：選號不改變中獎機率。每組 3 碼全中機率約 1/914，任何選法皆同。${P.v>=5?'三池也不例外：全歷史實測每期開出 ≥2 顆逾期號 63.8%，純隨機應為 64.4%——逾期號並沒有比較容易開出。':''}${P.v>=6?'主號同理：逾期開出的號碼下一期再開的機率實測 13.11%，理論值 12.82%，沒有差別。':''}開獎後由系統自動兌獎，結果見「🏆 中獎追蹤」。</div>`:''}
     </div>`;
   })()}
   <div class="card">

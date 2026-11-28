@@ -84,6 +84,23 @@ function structCheck(game,pending,lastDraw,recNums){
     }
     if('excluded' in pending) errs.push('v5 不得帶 excluded');
   }
+  // sfg-v6（2026-11-28）：主號＝上期「逾期開出」號（開出前沉寂 ≥T），依序固定在 A/B/C/D 各一顆
+  if(pending.v>=6){
+    const A=pending.anchors;
+    if(!Array.isArray(A)) errs.push('v6 缺 anchors');
+    else{
+      const gl=Object.values(pending.strategies||{});
+      A.forEach((a,i)=>{ if(i>3||!(gl[i]||[]).includes(a)) errs.push(`主號 ${a} 不在第 ${i+1} 組`); });
+      if(new Set(A).size!==A.length) errs.push('主號重複');
+      if(recNums&&recNums.length>1){
+        const T=game==='m6'?8:7, last=recNums[0], prior={};
+        for(const n of last){ let g=0; for(const r of recNums.slice(1)){ if(r.includes(n)) break; g++; } prior[n]=g; }
+        const exp=last.filter(n=>prior[n]>=T).sort((a,b)=>prior[b]-prior[a]||a-b).slice(0,4);
+        if(JSON.stringify(exp)!==JSON.stringify(A)) errs.push(`主號與開獎紀錄推算不符（應為 ${exp}）`);
+        if(JSON.stringify(exp.map(n=>prior[n]))!==JSON.stringify(pending.anchorGaps||[])) errs.push('anchorGaps 不符');
+      }
+    }
+  }
   return errs;
 }
 
@@ -117,8 +134,8 @@ function check(game,dataFile,htmlFile,label){
     const js=cp.execFileSync('/usr/bin/python3',['-c',
       `import json,sys;sys.path.insert(0,${JSON.stringify(dir)});import pick_engine as p;print(json.dumps(p.gen_pending_core(${JSON.stringify(game)},p._read_records(${JSON.stringify(game)}))))`],
       {encoding:'utf8'});
-    const fx=JSON.parse(js); if(fx&&fx.v>=5) sandbox.__V5FIXTURE=fx;
-  }catch(e){ /* 引擎不可用時略過 fixture */ }
+    const fx=JSON.parse(js); if(fx&&fx.v>=5) sandbox.__V5FIXTURE=fx; else sandbox.__V5FIXERR='引擎輸出非 v5+';
+  }catch(e){ sandbox.__V5FIXERR='產生失敗：'+String(e.message).slice(0,60); }
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(dir+dataFile,'utf8'),sandbox);
   let errs=[];
@@ -154,7 +171,7 @@ function check(game,dataFile,htmlFile,label){
       let missing=(pend&&pend.strategies)?groupMissing(pickHTML,pend.strategies):[];
       // v5 分支 fixture：data 仍是舊版時，也用引擎輸出的 v5 pending 跑一次 renderPick，確保新版卡片每次都被測到
       let v5fx=null;
-      if(typeof __V5FIXTURE!=='undefined'&&__V5FIXTURE&&!(pend&&pend.v>=5)){
+      if(typeof __V5FIXTURE!=='undefined'&&__V5FIXTURE&&!(pend&&pend.v>=__V5FIXTURE.v)){
         const saved=pendingPick; let html2='';
         const el2={ set innerHTML(v){ html2=String(v); }, get innerHTML(){ return html2; } };
         try{ pendingPick=__V5FIXTURE; renderPick(el2);
@@ -164,7 +181,8 @@ function check(game,dataFile,htmlFile,label){
         }catch(e){ v5fx={ok:false,err:e.message}; }
         pendingPick=saved;
       }
-      return JSON.stringify({errs, missing, pend, v5fx, rec:(typeof BASE_REC!=='undefined')?BASE_REC.slice(0,60).map(r=>r.n):[], lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
+      if(typeof __V5FIXERR!=='undefined') v5fx={ok:false,err:'v5 fixture '+__V5FIXERR};
+      return JSON.stringify({errs, missing, pend, v5fx, fx:(typeof __V5FIXTURE!=='undefined')?__V5FIXTURE:null, rec:(typeof BASE_REC!=='undefined')?BASE_REC.slice(0,60).map(r=>r.n):[], lastDraw:(typeof BASE_REC!=='undefined'&&BASE_REC[0])?BASE_REC[0].n:[]});
     })()
   `,sandbox);
   const r=JSON.parse(out);
@@ -173,7 +191,10 @@ function check(game,dataFile,htmlFile,label){
   const parts=[];
   parts.push(errs.length?`❌ 腳本錯誤:${errs.join('|')}`:'✅ 腳本零錯誤');
   parts.push(r.missing.length?`❌ 顯示缺號:${r.missing.join(',')}`:'✅ 顯示=發布');
-  if(r.v5fx) parts.push(r.v5fx.ok?'✅ v5卡片渲染':`❌ v5卡片渲染:${r.v5fx.err||('缺號 '+r.v5fx.missing+(r.v5fx.poolsShown?'':'／無三池區塊'))}`);
+  if(r.v5fx) parts.push(r.v5fx.ok?'✅ 新版卡片渲染':`❌ 新版卡片:${r.v5fx.err||('缺號 '+r.v5fx.missing+(r.v5fx.poolsShown?'':'／無三池區塊'))}`);
+  // 新版 fixture 也跑結構驗規（data 仍是舊版時，三池／主號推算才驗得到）
+  let fxStruct=null;
+  if(r.fx&&!(r.pend&&r.pend.v>=r.fx.v)){ fxStruct=structCheck(game,r.fx,r.lastDraw,r.rec); parts.push(fxStruct.length?`❌ 新版fixture結構:${fxStruct.join('|')}`:`✅ v${r.fx.v} fixture結構合規`); }
   if(struct===null) parts.push('ℹ️ 舊格式 pending（相容期，跳過結構驗規）');
   else parts.push(struct.length?`❌ 結構:${struct.join('|')}`
                                :`✅ v${r.pend.v} 結構合規`);
@@ -214,12 +235,18 @@ function check(game,dataFile,htmlFile,label){
           const arr=x=>x.trim()?x.split(',').map(s=>+s.trim()):[];
           poolsOk=!!mP&&JSON.stringify({lz:arr(mP[1]),gap1:arr(mP[2]),od:arr(mP[3])})===JSON.stringify({lz:r.pend.pools.lz,gap1:r.pend.pools.gap1,od:r.pend.pools.od});
         }
-        recompOk=groupsOk&&exOk&&poolsOk;
-        parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區 ')+(poolsOk?'':'三池'));
+        let anchOk=true;
+        if(r.pend.v>=6){
+          const mA=py.match(/^ANCHORS \[([\d, ]*)\]/m);
+          const got=mA&&mA[1].trim()?mA[1].split(',').map(s=>+s.trim()):[];
+          anchOk=!!mA&&JSON.stringify(got)===JSON.stringify(r.pend.anchors||[]);
+        }
+        recompOk=groupsOk&&exOk&&poolsOk&&anchOk;
+        parts.push(recompOk?'✅ Python重算一致':'❌ Python重算不一致 '+(groupsOk?'':'組 ')+(exOk?'':'排除區 ')+(poolsOk?'':'三池 ')+(anchOk?'':'主號'));
       }
     }catch(e){ parts.push('❌ 重算失敗:'+e.message.slice(0,80)); recompOk=false; }
   }
-  const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false)&&(!r.v5fx||r.v5fx.ok);
+  const ok=!errs.length&&!r.missing.length&&(struct===null||!struct.length)&&(recompOk!==false)&&(!r.v5fx||r.v5fx.ok)&&(!fxStruct||!fxStruct.length);
   if(!ok) allOk=false;
   console.log(`${label}: ${parts.join(' | ')}`);
 }

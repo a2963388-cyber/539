@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pick_engine — 期號種子可重現選號引擎（sfg-v5「三池」）
+pick_engine — 期號種子可重現選號引擎（sfg-v6「三池＋逾期開出主號」）
 =================================================
 
 事前註冊：sfg-v1 2026-08-09、sfg-v2/fpx-v2 2026-08-12、
-         sfg-v3/fpx-v3 2026-08-16、sfg-v4 2026-08-17、**sfg-v5 2026-11-27**（皆鈞洋拍板）。
+         sfg-v3/fpx-v3 2026-08-16、sfg-v4 2026-08-17、sfg-v5 2026-11-27、**sfg-v6 2026-11-28**（皆鈞洋拍板）。
+
+═══ v6 變更紀錄（2026-11-28，鈞洋拍板；只往前生效）═══
+
+  **主號＝上期「逾期開出」的號碼**：上期開出號中，開出前沉寂 ≥T（539/F5 7、六合 8，同三池逾期門檻）者。
+  依開出前沉寂由大到小（同值號碼小者先）取前 4 顆，依序固定放進 A/B/C/D 組各一顆（每顆只用一次，12 碼仍不重複），
+  各組其餘 2 碼照 v5 三池規則抽；其他組的隨機抽號不會抽到主號。上期沒有逾期開出號 ⇒ 與 v5 完全相同。
+  主號必在連莊池內（上期開出），故選號仍為三池子集。
+
+  誠實揭露（事前寫下、事後不改口）：逾期開出的號碼下一期再開的機率，全歷史實測
+  539 13.11%／F5 12.93%／六合 12.13%，與所有開出號（12.92/12.81/12.31%）及理論值（12.82/12.82/12.24%）
+  無顯著差異（z=+0.92/+0.37/−0.26，2026-11-28）。本規則是可重現的選號慣例，不改變中獎機率與期望值。
+
+  生效：539 第 115289 期、六合 26/126、F5 第 12076 期起（F5 12075 已以 v5 發布，不抽換）。
 
 ═══ v5 變更紀錄（2026-11-27，鈞洋拍板；只往前生效，不回頭重算歷史）═══
 
@@ -213,9 +226,9 @@ PRNG（Lehmer LCG，與本系統既有 G0 家族與網頁 lcgPicks 同款，跨�
 
 from itertools import combinations
 
-ALGO = "sfg-v5"   # v5(11-27)三池：連莊∪隔一期∪逾期； v1(08-09)避上期；v2(08-12)加 fpx 排除區；v3(08-16)解除避上期+R1改全域；
+ALGO = "sfg-v6"   # v6(11-28)三池＋上期逾期開出號為主號；v5(11-27)三池：連莊∪隔一期∪逾期； v1(08-09)避上期；v2(08-12)加 fpx 排除區；v3(08-16)解除避上期+R1改全域；
                   # v4(08-17)廢除 fpx 排除區（回測證實無預測價值且正在自我失效）
-ALGO_V = 5        # 寫進 BASE_PENDING 的 v 欄位；勿在別處寫死版號（見 verify_consistency.js 的坑）
+ALGO_V = 6        # 寫進 BASE_PENDING 的 v 欄位；勿在別處寫死版號（見 verify_consistency.js 的坑）
 MOD = 2147483647
 MULT = 48271
 
@@ -227,6 +240,7 @@ GAMES = {
 
 # sfg-v5 三池：逾期門檻＝ceil(pool_max/draw − 1)（理論平均間隔，事前註冊、不隨資料漂移）
 OD_THRESHOLD = {"539": 7, "f5": 7, "m6": 8}
+MAX_ANCHORS = 4        # sfg-v6：主號最多 4 顆（一組一顆）
 MIN_HIST = 40          # 歷史不足不產號（與 build_log_entries 補結算門檻一致）
 MIN_POOL = 16          # 候選池下限：12 碼＋過濾規則的活動空間
 ATRISK_MIN = 20        # 平坦度深度樣本門檻（與頁面平坦度卡同值）
@@ -274,7 +288,7 @@ def group_ok(trio, hi, relax_zone):
 
 
 def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
-                min_high=0):
+                min_high=0, fixed=None):
     """自數列連續取號湊一組；違規放棄重抽（同一條數列），上限 GROUP_RETRY_LIMIT。
 
     min_high＝本組**最少**須佔用的高號（≥hi）數（sfg-v3，2026-08-16）。
@@ -283,7 +297,7 @@ def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
     使最後一組必被要求補足缺口，G3 遂由構造保證而非事後檢查。
     """
     for _ in range(GROUP_RETRY_LIMIT):
-        trio = []
+        trio = [fixed] if fixed is not None else []   # sfg-v6：主號固定在本組
         # 單組取號也設護欄，避免池過小時空轉
         for _pull in range(5000):
             n = rng.next_num(pool_max)
@@ -305,11 +319,11 @@ def _draw_group(rng, pool, used, pool_max, hi, relax_zone, require_zones=None,
     return None
 
 
-def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
+def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone, anchors=()):
     """跑一整輪抽取；失敗回 None。數列自 s0 重啟保證各級 fallback 可重現。"""
     rng = Lehmer(s0)
     pool_max = game_cfg["pool_max"]
-    used = set()
+    used = set(anchors)        # 主號預先保留：隨機抽號不會抽到（由所屬組以 fixed 放入）
     groups = []
     for gi in range(4):
         # 高號下限引導（sfg-v3）：still = 還缺幾顆；after = 本組之後還有幾組。
@@ -317,11 +331,13 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
         # 若讓最後一組扛滿 3 顆，該組必然三碼同域而撞 R4 —— 實測 539 有 7 期
         # 因此掉進 relaxed，其中期 115066 更一路崩到 lex 兜底。記 2 可使
         # 壓力提前一組分擔，任一組最多只需 2 顆高號，不觸發 R4。
-        have = sum(1 for n in used if n >= hi)
+        placed = {n for g in groups for n in g}
+        have = sum(1 for n in placed if n >= hi)
         still = max(0, MIN_HIGH_TOTAL - have)
         min_high = max(0, still - 2 * (3 - gi))
         trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone,
-                           min_high=min_high)
+                           min_high=min_high,
+                           fixed=anchors[gi] if gi < len(anchors) else None)
         if trio is None:
             return None
         groups.append(trio)
@@ -339,11 +355,13 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
             if len(missing) > 3:
                 return None  # 一組 3 碼不可能補齊，交給 fallback 階梯
             used.difference_update(groups[3])
+            used.update(anchors)   # 主號保留不釋出
             # 重抽的 D 仍須扛起 G3 缺口，否則舊 D 的高號會隨重抽一起消失
-            have_abc = sum(1 for n in used if n >= hi)
+            have_abc = sum(1 for g in groups[:3] for n in g if n >= hi)
             trio = _draw_group(rng, pool, used, pool_max, hi, relax_zone,
                                require_zones=missing,
-                               min_high=max(0, MIN_HIGH_TOTAL - have_abc))
+                               min_high=max(0, MIN_HIGH_TOTAL - have_abc),
+                               fixed=anchors[3] if len(anchors) > 3 else None)
             if trio is None:
                 return None
             groups[3] = trio
@@ -355,9 +373,9 @@ def _attempt(game_cfg, s0, pool, hi, relax_cover, relax_zone):
     return groups
 
 
-def _lex_fallback(pool, hi, pool_max):
+def _lex_fallback(pool, hi, pool_max, anchors=()):
     """字典序回溯：取最小合法 4×3（永不放寬的規則全數保留，含 G3 高號合計）。"""
-    ordered = sorted(pool)
+    ordered = sorted(set(pool) - set(anchors))
 
     def pick(groups, remaining):
         if len(groups) == 4:
@@ -369,7 +387,10 @@ def _lex_fallback(pool, hi, pool_max):
         avail = sum(1 for n in remaining if n >= hi)
         if have + min(avail, 3 * (4 - len(groups))) < MIN_HIGH_TOTAL:
             return None
-        for trio in combinations(remaining, 3):
+        gi = len(groups)
+        cands = ((tuple(sorted((anchors[gi],) + pair)) for pair in combinations(remaining, 2))
+                 if gi < len(anchors) else combinations(remaining, 3))
+        for trio in cands:
             if group_ok(list(trio), hi, relax_zone=True):
                 res = pick(groups + [list(trio)],
                            [n for n in remaining if n not in trio])
@@ -448,6 +469,17 @@ def three_pools(game, records):
     return pools, readmit_order
 
 
+def overdue_anchors(game, records):
+    """sfg-v6：上期開出號中「開出前沉寂 ≥T」者 → (主號 list, 對應開出前沉寂 list)。records 新→舊。"""
+    if len(records) < 2:
+        return [], []
+    cfg = GAMES[game]
+    prior = current_gaps(records[1:], cfg["pool_max"])
+    T = OD_THRESHOLD[game]
+    hits = sorted((n for n in records[0]["n"] if prior[n] >= T), key=lambda n: (-prior[n], n))[:MAX_ANCHORS]
+    return hits, [prior[n] for n in hits]
+
+
 def flatness_exclude(game, records):
     """fpx-v3：回傳 (excluded 升冪, excl_depths 升冪, readmit_order)。純函數。
 
@@ -481,7 +513,7 @@ def flatness_exclude(game, records):
 
 
 def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=(),
-                    pools=None):
+                    pools=None, anchors=(), anchor_gaps=()):
     """主入口。純函數：同輸入必得同結果。
 
     sfg-v3（2026-08-16）：候選池＝全池 ∖ excluded（fpx-v3 不出牌排除區）。
@@ -520,12 +552,12 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=(),
               (["cover", "zone"], True, True)]
     groups, relaxed = None, None
     for tags, rc, rz in ladder:
-        groups = _attempt(cfg, s0, pool, hi, rc, rz)
+        groups = _attempt(cfg, s0, pool, hi, rc, rz, anchors=tuple(anchors))
         if groups is not None:
             relaxed = list(tags)
             break
     if groups is None:
-        groups = _lex_fallback(pool, hi, pool_max)
+        groups = _lex_fallback(pool, hi, pool_max, anchors=tuple(anchors))
         relaxed = ["cover", "zone", "lex"]
         if groups is None:  # 數學上不應發生；發生即資料異常
             raise RuntimeError(f"pick_engine: {game} 期 {last_period} 無合法解")
@@ -544,6 +576,9 @@ def gen_four_groups(game, last_period, last_draw, excluded=(), readmit_order=(),
     }
     # sfg-v4：排除區已廢除，產線恆為空 ⇒ 不輸出該欄位，頁面的排除區卡自動消失。
     # 回測仍可傳 excluded 進來模擬舊制，此時照常輸出以供比對。
+    if ALGO_V >= 6 and pools is not None:
+        out["anchors"] = list(anchors)            # sfg-v6 主號（可能為空陣列＝本期無逾期開出號）
+        out["anchorGaps"] = list(anchor_gaps)
     if pools is not None:
         out["pools"] = {k: list(v) for k, v in pools.items()}
         readmitted = sorted(set(excluded) - set(eff_excluded))
@@ -566,8 +601,10 @@ def gen_pending_core(game, records):
     if not records or len(records) < MIN_HIST:
         return {}
     pools, readmit_order = three_pools(game, records)
+    anchors, anchor_gaps = overdue_anchors(game, records)
     return gen_four_groups(game, records[0]["p"], records[0]["n"],
-                           readmit_order=readmit_order, pools=pools)
+                           readmit_order=readmit_order, pools=pools,
+                           anchors=anchors, anchor_gaps=anchor_gaps)
 
 
 # ──────────────────────────── 驗證與 CLI ────────────────────────────
@@ -635,6 +672,22 @@ def _verify_output(game, last_draw, res, records=None):
                     errs.append("三池與 records 重算不一致")
         if "excluded" in res:
             errs.append("v5 不得輸出 excluded")
+    # sfg-v6：主號必須依序在 A/B/C/D 各一顆；與 records 重算一致
+    if res.get("v", 0) >= 6:
+        A = res.get("anchors")
+        if A is None:
+            errs.append("v6 缺 anchors")
+        else:
+            gl = list(res["strategies"].values())
+            for i, a in enumerate(A):
+                if i >= 4 or a not in gl[i]:
+                    errs.append(f"主號 {a} 不在第 {i+1} 組")
+            if len(set(A)) != len(A):
+                errs.append("主號重複")
+            if records is not None:
+                expA, expG = overdue_anchors(game, records)
+                if expA != A or expG != res.get("anchorGaps"):
+                    errs.append("主號與 records 重算不一致")
     return errs
 
 
@@ -653,6 +706,7 @@ def selftest():
             continue
         fallback_n = pool_relax_n = lex_n = n = 0
         psizes = []
+        anchor_n = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
         for i in range(len(recs)):
             hist = recs[i:]
             if len(hist) < 40:
@@ -677,6 +731,7 @@ def selftest():
             n += 1
             P = res1.get("pools", {})
             psizes.append(len(P.get("lz", [])) + len(P.get("gap1", [])) + len(P.get("od", [])))
+            anchor_n[len(res1.get("anchors", []))] += 1
             if res1["relaxed"]:
                 fallback_n += 1
             if "pool" in res1["relaxed"]:
@@ -684,7 +739,8 @@ def selftest():
             if "lex" in res1["relaxed"]:
                 lex_n += 1
         ps = f"池 min {min(psizes)}／avg {sum(psizes)/len(psizes):.1f}／max {max(psizes)}" if psizes else "池 —"
-        print(f"[{game}] {n} 期回放完成｜{ALGO}（三池）｜{ps}"
+        print(f"[{game}] 主號顆數分佈 " + " ".join(f"{k}顆:{v}" for k, v in anchor_n.items()))
+        print(f"[{game}] {n} 期回放完成｜{ALGO}（三池＋主號）｜{ps}"
               f"｜fallback {fallback_n}（pool 回補 {pool_relax_n}、lex {lex_n}）")
     print("SELFTEST", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
@@ -697,6 +753,8 @@ def _print_core(game, res):
     print(f"v={res.get('v')}  algo={res.get('algo')}  hi={res['hi']}  "
           f"relaxed={res['relaxed']}")
     # v4 起產線無排除區；僅在有值時才印（回測傳 excluded 進來時仍看得到）
+    if "anchors" in res:
+        print(f"ANCHORS {res['anchors']} gaps={res.get('anchorGaps', [])}")
     if res.get("pools"):
         P = res["pools"]
         print(f"POOLS lz={P['lz']} gap1={P['gap1']} od={P['od']}"
